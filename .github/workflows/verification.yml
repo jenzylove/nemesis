@@ -22,9 +22,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
-          cache: npm
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
       - name: Frontend production build
         env:
           NEXT_PUBLIC_NEMESIS_API_URL: https://nemesis-api-staging-h7bnd6kzfq-uc.a.run.app
