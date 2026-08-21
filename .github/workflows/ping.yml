@@ -1,0 +1,8 @@
+name: NEMESIS workflow registration check
+on:
+  pull_request:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo workflow-ok
