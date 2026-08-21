@@ -1,0 +1,91 @@
+name: NEMESIS secure cloud runner
+
+on:
+  pull_request:
+    branches:
+      - verify/09492618
+
+permissions:
+  contents: read
+
+jobs:
+  cloud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 09492618c7d256e2a63c16241c05f2be42c9187f
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Create ephemeral credential bridge
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out /tmp/nemesis_bridge_private.pem 2>/dev/null
+          openssl pkey -in /tmp/nemesis_bridge_private.pem -pubout -out /tmp/nemesis_bridge_public.pem
+          echo NEMESIS_BRIDGE_PUBLIC_KEY_BEGIN
+          cat /tmp/nemesis_bridge_public.pem
+          echo NEMESIS_BRIDGE_PUBLIC_KEY_END
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nemesis-credential-bridge-public-key
+          path: /tmp/nemesis_bridge_public.pem
+          retention-days: 1
+      - name: Wait for encrypted credential bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ref='cloud-run/09492618'
+          url="https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/.github/nemesis-credential.enc.json?ref=${ref//\//%2F}"
+          found=0
+          for attempt in $(seq 1 120); do
+            if curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "$url" -o /tmp/credential_meta.json 2>/dev/null; then
+              python -c "import base64,json; meta=json.load(open('/tmp/credential_meta.json')); bundle=json.loads(base64.b64decode(meta['content']).decode()); open('/tmp/key.enc','wb').write(base64.b64decode(bundle['key_b64'])); open('/tmp/credential.enc','wb').write(base64.b64decode(bundle['data_b64']))"
+              openssl pkeyutl -decrypt -inkey /tmp/nemesis_bridge_private.pem -in /tmp/key.enc -out /tmp/aes.key -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+              openssl enc -d -aes-256-cbc -pbkdf2 -in /tmp/credential.enc -out /tmp/nemesis-credential.json -pass file:/tmp/aes.key
+              python -c "import json; value=json.load(open('/tmp/nemesis-credential.json')); assert value.get('type')=='service_account'; assert value.get('project_id')=='nemesis-506114'; assert value.get('private_key') and value.get('client_email')"
+              found=1
+              break
+            fi
+            sleep 5
+          done
+          test "$found" = 1
+          echo 'GOOGLE_APPLICATION_CREDENTIALS=/tmp/nemesis-credential.json' >> "$GITHUB_ENV"
+      - name: Authenticate and verify exact source
+        run: |
+          set -euo pipefail
+          gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS" --quiet >/dev/null
+          gcloud config set project nemesis-506114 --quiet >/dev/null
+          test "$(git rev-parse HEAD)" = '09492618c7d256e2a63c16241c05f2be42c9187f'
+          python -m pip install -q -r backend/requirements.txt
+          python -m pytest -q backend/tests
+      - name: Deploy exact tested tree
+        run: |
+          set -euo pipefail
+          gcloud builds submit --project nemesis-506114 --config cloudbuild.yaml . --quiet --format='value(id)' | tee /tmp/build_id.txt
+          test -s /tmp/build_id.txt
+      - name: Fetch non-secret verification script
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          url="https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/.github/cloud_verify.py?ref=cloud-run%2F09492618"
+          curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "$url" -o /tmp/helper_meta.json
+          python -c "import base64,json; meta=json.load(open('/tmp/helper_meta.json')); open('/tmp/cloud_verify.py','wb').write(base64.b64decode(meta['content']))"
+      - name: Verify real staging flow
+        run: python /tmp/cloud_verify.py
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: nemesis-cloud-verification-summary
+          path: /tmp/nemesis-cloud-verification-summary.json
+          retention-days: 1
+      - name: Wipe ephemeral credential material
+        if: always()
+        run: |
+          set +e
+          for f in /tmp/nemesis-credential.json /tmp/nemesis_bridge_private.pem /tmp/nemesis_bridge_public.pem /tmp/key.enc /tmp/credential.enc /tmp/aes.key /tmp/credential_meta.json; do
+            if [ -f "$f" ]; then shred -u "$f" 2>/dev/null || rm -f "$f"; fi
+          done
