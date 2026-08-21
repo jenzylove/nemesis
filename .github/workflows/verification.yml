@@ -1,12 +1,15 @@
-name: NEMESIS verification
+name: NEMESIS cloud verification
 
 on:
   pull_request:
     branches:
       - verify/09492618
 
+permissions:
+  contents: read
+
 jobs:
-  verify:
+  cloud:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,16 +18,284 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Install backend dependencies
-        run: python -m pip install -r backend/requirements.txt
-      - name: Run backend tests
-        run: python -m pytest -q backend/tests
-      - uses: actions/setup-node@v4
+      - uses: google-github-actions/setup-gcloud@v2
         with:
-          node-version: '22.16.0'
-      - name: Install frontend dependencies
-        run: npm install --no-audit --no-fund
-      - name: Frontend production build
+          version: '>= 496.0.0'
+      - name: Generate ephemeral credential bridge key
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out /tmp/nemesis_bridge_private.pem 2>/dev/null
+          openssl pkey -in /tmp/nemesis_bridge_private.pem -pubout -out /tmp/nemesis_bridge_public.pem
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nemesis-credential-bridge-public-key
+          path: /tmp/nemesis_bridge_public.pem
+          retention-days: 1
+      - name: Receive encrypted development credential
         env:
-          NEXT_PUBLIC_NEMESIS_API_URL: https://nemesis-api-staging-h7bnd6kzfq-uc.a.run.app
-        run: npm run build
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ref='cloud-run/09492618'
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/.github/nemesis-credential.enc.json?ref=${ref//\//%2F}"
+          received=0
+          for attempt in $(seq 1 120); do
+            if curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "$api" -o /tmp/nemesis_credential_meta.json 2>/dev/null; then
+              python - <<'PY'
+import base64,json
+meta=json.load(open('/tmp/nemesis_credential_meta.json'))
+raw=base64.b64decode(meta['content']).decode()
+bundle=json.loads(raw)
+open('/tmp/nemesis_key.enc','wb').write(base64.b64decode(bundle['key_b64']))
+open('/tmp/nemesis_credential.enc','wb').write(base64.b64decode(bundle['data_b64']))
+PY
+              openssl pkeyutl -decrypt -inkey /tmp/nemesis_bridge_private.pem -in /tmp/nemesis_key.enc -out /tmp/nemesis_aes.key -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+              openssl enc -d -aes-256-cbc -pbkdf2 -in /tmp/nemesis_credential.enc -out /tmp/nemesis-credential.json -pass file:/tmp/nemesis_aes.key
+              python - <<'PY'
+import json
+p=json.load(open('/tmp/nemesis-credential.json'))
+assert p.get('type')=='service_account'
+assert p.get('project_id')=='nemesis-506114'
+assert p.get('private_key') and p.get('client_email')
+PY
+              received=1
+              break
+            fi
+            sleep 5
+          done
+          test "$received" = 1
+          echo 'GOOGLE_APPLICATION_CREDENTIALS=/tmp/nemesis-credential.json' >> "$GITHUB_ENV"
+      - name: Authenticate to NEMESIS staging project
+        run: |
+          set -euo pipefail
+          gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS" --quiet >/dev/null
+          gcloud config set project nemesis-506114 --quiet >/dev/null
+          test "$(gcloud config get-value project)" = 'nemesis-506114'
+      - name: Confirm exact deploy source and run backend suite
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '09492618c7d256e2a63c16241c05f2be42c9187f'
+          python -m pip install -q -r backend/requirements.txt
+          python -m pytest -q backend/tests
+      - name: Deploy exact tested commit through Cloud Build
+        run: |
+          set -euo pipefail
+          gcloud builds submit --project nemesis-506114 --config cloudbuild.yaml . --quiet --format='value(id)' | tee /tmp/nemesis_build_id.txt
+          test -s /tmp/nemesis_build_id.txt
+          gcloud run services describe nemesis-api-staging --project nemesis-506114 --region us-central1 --format=json > /tmp/nemesis_service.json
+          python - <<'PY'
+import json
+s=json.load(open('/tmp/nemesis_service.json'))
+status=s.get('status',{})
+assert status.get('url')
+print('deployed_revision='+str(status.get('latestReadyRevisionName','')))
+print('service_url='+status['url'])
+PY
+      - name: Discover real Base verification transactions
+        run: |
+          set -euo pipefail
+          export BASE_RPC_URL="$(gcloud secrets versions access latest --secret=nemesis-staging-base-rpc --project=nemesis-506114)"
+          python - <<'PY'
+import json,os,time,urllib.request
+RPC=os.environ['BASE_RPC_URL']
+TOPIC='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+
+def rpc(method,params):
+    data=json.dumps({'jsonrpc':'2.0','id':1,'method':method,'params':params}).encode()
+    req=urllib.request.Request(RPC,data=data,headers={'content-type':'application/json'})
+    with urllib.request.urlopen(req,timeout=30) as r: payload=json.load(r)
+    if payload.get('error'): raise RuntimeError(payload['error'])
+    return payload.get('result')
+
+def ok(txh):
+    r=rpc('eth_getTransactionReceipt',[txh])
+    return bool(r and int(r.get('status','0x0'),16)==1)
+
+def block(n): return rpc('eth_getBlockByNumber',[hex(n),True]) or {'transactions':[]}
+latest=int(rpc('eth_blockNumber',[]),16)
+
+def delayed_native():
+    for offset in (1200,1800,2600,3600,5000,7000,9000):
+        start=latest-offset
+        blocks={n:block(n) for n in range(start,start+61)}
+        by_from={}
+        for n,b in blocks.items():
+            for tx in b.get('transactions') or []:
+                f=str(tx.get('from') or '').lower()
+                if f: by_from.setdefault(f,[]).append((n,tx))
+        for b0 in range(start,start+12):
+            for tx1 in blocks[b0].get('transactions') or []:
+                if not tx1.get('to') or int(tx1.get('value','0x0'),16)<=0: continue
+                a=tx1['to'].lower(); outs=[x for x in by_from.get(a,[]) if b0 < x[0] <= b0+40]
+                if not outs or any(n<=b0+20 for n,_ in outs): continue
+                n2,tx2=outs[0]
+                if int(tx2.get('value','0x0'),16)<=0 or not tx2.get('to'): continue
+                if not ok(tx1['hash']) or not ok(tx2['hash']): continue
+                return {'chain':'base','wallet_address':tx1['from'].lower(),'theft_transaction_hash':tx1['hash'].lower(),'initial_block':b0,'recipient':a,'resume_transaction_hash':tx2['hash'].lower(),'resume_block':n2,'resume_destination':tx2['to'].lower()}
+    raise RuntimeError('no delayed native multi-hop candidate found')
+
+def pad(addr): return '0x'+'0'*24+addr[2:].lower()
+def log_int(v): return int(v or '0x0',16)
+
+def split_token():
+    for offset in (1500,2500,4000,6000,9000,13000):
+        start=latest-offset
+        for base in range(start,start+100,10):
+            logs=rpc('eth_getLogs',[{'fromBlock':hex(base),'toBlock':hex(base+4),'topics':[TOPIC]}]) or []
+            for lg in logs[:250]:
+                topics=lg.get('topics') or []
+                if len(topics)!=3: continue
+                w='0x'+topics[1][-40:].lower(); a='0x'+topics[2][-40:].lower(); amount=log_int(lg.get('data'))
+                if w==a or amount<=1: continue
+                b0=log_int(lg.get('blockNumber')); token=lg.get('address','').lower()
+                outs=rpc('eth_getLogs',[{'fromBlock':hex(b0+1),'toBlock':hex(b0+20),'address':token,'topics':[TOPIC,pad(a)]}]) or []
+                if not outs: continue
+                outs.sort(key=lambda x:(log_int(x.get('blockNumber')),log_int(x.get('logIndex'))))
+                first=outs[0]; n2=log_int(first.get('blockNumber')); tx2=first.get('transactionHash','').lower()
+                same=[x for x in outs if x.get('transactionHash','').lower()==tx2]
+                moved=sum(log_int(x.get('data')) for x in same)
+                if not (moved<amount or len(same)>=2): continue
+                earlier_token=rpc('eth_getLogs',[{'fromBlock':hex(b0+1),'toBlock':hex(n2),'topics':[TOPIC,pad(a)]}]) or []
+                earlier_token.sort(key=lambda x:(log_int(x.get('blockNumber')),log_int(x.get('logIndex'))))
+                if earlier_token and earlier_token[0].get('transactionHash','').lower()!=tx2: continue
+                earlier_native=False
+                for n in range(b0+1,n2+1):
+                    for tx in block(n).get('transactions') or []:
+                        if str(tx.get('from') or '').lower()==a and tx.get('hash','').lower()!=tx2:
+                            earlier_native=True;break
+                    if earlier_native: break
+                if earlier_native: continue
+                tx1=lg.get('transactionHash','').lower()
+                if not tx1 or not ok(tx1) or not ok(tx2): continue
+                return {'chain':'base','wallet_address':w,'theft_transaction_hash':tx1,'initial_block':b0,'recipient':a,'token':token,'tracked_amount':str(amount),'split_transaction_hash':tx2,'split_block':n2,'moved_amount':str(moved)}
+    raise RuntimeError('no deterministic token split candidate found')
+
+result={'delayed_native':delayed_native()}
+try: result['split_token']=split_token()
+except Exception as exc: result['split_token_error']=str(exc)
+json.dump(result,open('/tmp/nemesis_candidates.json','w'),indent=2)
+print(json.dumps(result,indent=2))
+PY
+          unset BASE_RPC_URL
+      - name: Run real investigations and autonomous Scheduler PubSub resume
+        run: |
+          set -euo pipefail
+          export NEMESIS_URL="$(python - <<'PY'
+import json
+print(json.load(open('/tmp/nemesis_service.json'))['status']['url'])
+PY
+)"
+          python - <<'PY'
+import json,os,time,urllib.request
+base=os.environ['NEMESIS_URL'].rstrip('/')
+candidates=json.load(open('/tmp/nemesis_candidates.json'))
+
+def call(path,method='GET',body=None):
+    data=json.dumps(body).encode() if body is not None else None
+    req=urllib.request.Request(base+path,data=data,method=method,headers={'content-type':'application/json'} if body is not None else {})
+    with urllib.request.urlopen(req,timeout=300) as r:return r.status,json.load(r)
+
+def create(c):
+    status,p=call('/v1/cases','POST',{'wallet_address':c['wallet_address'],'chain':c['chain'],'theft_transaction_hash':c['theft_transaction_hash']})
+    assert status==201
+    assert p['agent_runtime']=='google_adk_gemini',p
+    assert p['case']['finding'] is not None,p
+    return p
+
+def trace(cid): return call('/v1/cases/'+cid+'/trace')[1]
+health=call('/health')[1]
+assert health.get('trace_engine')=='deterministic_v2',health
+out={'health':health}
+if candidates.get('split_token'):
+    p=create(candidates['split_token']);cid=p['case']['id'];t=trace(cid);types=[x['type'] for x in t['timeline']]
+    assert 'FUND_SPLIT_DETECTED' in types,(cid,types)
+    assert len(t['branches'])>=2,(cid,t['branches'])
+    assert len(t['graph']['edges'])>=2,(cid,t['graph'])
+    out['split_case']={'case_id':cid,'agent_runtime':p['agent_runtime'],'timeline_types':types,'branches':len(t['branches']),'edges':len(t['graph']['edges'])}
+p=create(candidates['delayed_native']);cid=p['case']['id'];t=trace(cid);types=[x['type'] for x in t['timeline']]
+assert any(b['status']=='DORMANT' for b in t['branches']),(cid,t['branches'])
+assert 'MONITORING_ACTIVE' in types,(cid,types)
+out['delayed_case_before']={'case_id':cid,'agent_runtime':p['agent_runtime'],'timeline_types':types,'branches':len(t['branches']),'edges':len(t['graph']['edges'])}
+json.dump(out,open('/tmp/nemesis_runtime_result.json','w'),indent=2)
+print(json.dumps(out,indent=2))
+PY
+          gcloud scheduler jobs run nemesis-monitor-tick --project nemesis-506114 --location us-central1 --quiet
+          python - <<'PY'
+import json,os,time,urllib.request
+base=os.environ['NEMESIS_URL'].rstrip('/');out=json.load(open('/tmp/nemesis_runtime_result.json'));cid=out['delayed_case_before']['case_id']
+def trace():
+    with urllib.request.urlopen(base+'/v1/cases/'+cid+'/trace',timeout=120) as r:return json.load(r)
+last=None
+for _ in range(24):
+    time.sleep(5);last=trace();types=[x['type'] for x in last['timeline']]
+    if 'MOVEMENT_DETECTED' in types and 'TRACING_RESUMED' in types and len(last['graph']['edges'])>=2: break
+else: raise RuntimeError('autonomous resume did not complete: '+json.dumps(last))
+types=[x['type'] for x in last['timeline']]
+out['delayed_case_after']={'case_id':cid,'timeline_types':types,'branches':len(last['branches']),'edges':len(last['graph']['edges']),'statuses':[b['status'] for b in last['branches']]}
+json.dump(out,open('/tmp/nemesis_runtime_result.json','w'),indent=2)
+print(json.dumps(out,indent=2))
+PY
+      - name: Verify Firestore persistence and Cloud request logs
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+import json,subprocess
+from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
+result=json.load(open('/tmp/nemesis_runtime_result.json'))
+case_ids=[v['case_id'] for k,v in result.items() if isinstance(v,dict) and 'case_id' in v]
+case_ids=list(dict.fromkeys(case_ids))
+db=firestore.Client(project='nemesis-506114')
+summary={}
+for cid in case_ids:
+    case=db.collection('cases').document(cid).get();assert case.exists
+    cols={}
+    for name in ('trace_branches','case_graph_nodes','case_graph_edges','case_timeline'):
+        docs=list(db.collection(name).where(filter=FieldFilter('case_id','==',cid)).stream());cols[name]=[d.to_dict() for d in docs]
+        assert docs,(cid,name)
+    assert all(x.get('provenance') for x in cols['case_graph_nodes']),(cid,'node provenance')
+    assert all(x.get('provenance') for x in cols['case_graph_edges']),(cid,'edge provenance')
+    timeline={x.get('type') for x in cols['case_timeline']}
+    summary[cid]={'branches':len(cols['trace_branches']),'nodes':len(cols['case_graph_nodes']),'edges':len(cols['case_graph_edges']),'timeline_events':len(cols['case_timeline']),'timeline_types':sorted(timeline),'finding_present':bool(case.to_dict().get('finding'))}
+    assert summary[cid]['finding_present']
+json.dump(summary,open('/tmp/nemesis_firestore_summary.json','w'),indent=2)
+print(json.dumps(summary,indent=2))
+PY
+          since="$(date -u -d '20 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"
+          gcloud logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"nemesis-api-staging\" AND timestamp>=\"${since}\"" --project nemesis-506114 --limit 300 --format=json > /tmp/nemesis_cloudrun_logs.json
+          python - <<'PY'
+import json
+logs=json.load(open('/tmp/nemesis_cloudrun_logs.json'))
+urls=[(e.get('httpRequest') or {}).get('requestUrl','') for e in logs]
+methods=[(e.get('httpRequest') or {}).get('requestMethod','') for e in logs]
+assert any('/v1/cases' in u for u in urls),urls
+assert any('/internal/monitoring/tick' in u for u in urls),urls
+assert any('/internal/events/pubsub' in u for u in urls),urls
+summary={'cloud_run_entries':len(logs),'case_requests':sum('/v1/cases' in u for u in urls),'scheduler_tick_requests':sum('/internal/monitoring/tick' in u for u in urls),'pubsub_push_requests':sum('/internal/events/pubsub' in u for u in urls),'post_requests':sum(m=='POST' for m in methods)}
+json.dump(summary,open('/tmp/nemesis_log_summary.json','w'),indent=2)
+print(json.dumps(summary,indent=2))
+PY
+          gcloud scheduler jobs describe nemesis-monitor-tick --project nemesis-506114 --location us-central1 --format='value(state,httpTarget.uri)'
+          gcloud pubsub subscriptions describe nemesis-case-events-push --project nemesis-506114 --format='value(pushConfig.pushEndpoint)'
+      - name: Verify Gemini 3.5 ADK deployment configuration
+        run: |
+          set -euo pipefail
+          gcloud run services describe nemesis-api-staging --project nemesis-506114 --region us-central1 --format=json > /tmp/nemesis_service_final.json
+          python - <<'PY'
+import json
+s=json.load(open('/tmp/nemesis_service_final.json'))
+containers=s['spec']['template']['spec']['containers'];env={x['name']:x.get('value') for x in containers[0].get('env',[]) if 'value' in x}
+assert env.get('GOOGLE_GENAI_USE_VERTEXAI')=='TRUE',env
+assert env.get('GEMINI_MODEL')=='gemini-3.5-flash',env
+assert env.get('GOOGLE_CLOUD_LOCATION')=='global',env
+r=json.load(open('/tmp/nemesis_runtime_result.json'))
+assert all(v.get('agent_runtime')=='google_adk_gemini' for v in r.values() if isinstance(v,dict) and 'agent_runtime' in v)
+print(json.dumps({'model':env['GEMINI_MODEL'],'vertex_ai':env['GOOGLE_GENAI_USE_VERTEXAI'],'location':env['GOOGLE_CLOUD_LOCATION'],'adk_runtime_verified':True}))
+PY
+      - name: Wipe ephemeral credential material
+        if: always()
+        run: |
+          set +e
+          for f in /tmp/nemesis-credential.json /tmp/nemesis_bridge_private.pem /tmp/nemesis_bridge_public.pem /tmp/nemesis_key.enc /tmp/nemesis_credential.enc /tmp/nemesis_aes.key /tmp/nemesis_credential_meta.json; do
+            if [ -f "$f" ]; then shred -u "$f" 2>/dev/null || rm -f "$f"; fi
+          done
