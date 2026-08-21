@@ -69,6 +69,12 @@ def test_unsupported_gemini_entity_attribution_is_rejected():
     finding=AgentFinding(classification="unknown",summary="The funds reached an exchange.",confidence=.1,evidence_references=["transaction.to_address"],limitations=[])
     with pytest.raises(ValueError,match="unsupported semantic attribution"):validate_agent_finding(finding,evidence)
 
+def test_unsupported_named_protocol_attribution_is_rejected():
+    tx=NormalizedTransaction(hash=TX_HASH,chain="ethereum",block_number=1,timestamp=datetime.now(timezone.utc),status="success",from_address=FROM,to_address=TO,native_value_wei="0",input="0x",erc20_transfers=[])
+    evidence=DeterministicEvidence(submitted_wallet=WALLET,transaction=tx)
+    finding=AgentFinding(classification="unknown",summary="The transaction interacted with a UniswapX reactor contract using Permit2.",confidence=.1,evidence_references=["transaction.to_address"],limitations=[])
+    with pytest.raises(ValueError,match="unsupported named entity attribution"):validate_agent_finding(finding,evidence)
+
 def test_production_settings_require_real_integrations():
     with pytest.raises(ValueError,match="production configuration is incomplete"):
         Settings(app_env="production",_env_file=None)
@@ -135,10 +141,23 @@ class AddressScanRpc(JsonRpcProvider):
             return {"transactions":[{"hash":TX_HASH,"from":WALLET if number==17 else FROM,"to":TO}]}
         if method=="eth_getLogs":return []
 
+class MixedDirectionRpc(JsonRpcProvider):
+    def __init__(self):super().__init__({"ethereum":"fixture"})
+    async def _call(self,chain,method,params):
+        if method=="eth_blockNumber":return "0x11"
+        if method=="eth_getBlockByNumber":return {"transactions":[{"hash":TX_HASH,"from":FROM,"to":WALLET}]}
+        if method=="eth_getLogs" and params[0]["topics"][1] is not None:return [{"transactionHash":TX_HASH,"blockNumber":"0x11"}]
+        if method=="eth_getLogs":return []
+
 @pytest.mark.asyncio
 async def test_real_rpc_address_recheck_scans_confirmed_blocks():
     cursor,movements=await AddressScanRpc().get_address_movements("ethereum",WALLET,16,20)
     assert cursor==17 and movements==[{"transaction_hash":TX_HASH,"block_number":17,"kind":"native_or_contract","direction":"out"}]
+
+@pytest.mark.asyncio
+async def test_outgoing_token_log_overrides_same_transaction_inbound_call():
+    _,movements=await MixedDirectionRpc().get_address_movements("ethereum",WALLET,16,20)
+    assert movements==[{"transaction_hash":TX_HASH,"block_number":17,"kind":"erc20","direction":"out"}]
 
 @pytest.mark.asyncio
 async def test_automatic_split_dormant_monitor_resume_graph_and_idempotency():
