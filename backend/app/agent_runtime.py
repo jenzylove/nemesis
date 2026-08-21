@@ -40,9 +40,21 @@ def validate_agent_finding(finding: AgentFinding, evidence: DeterministicEvidenc
     returned = {v.lower() for v in re.findall(r"0x[a-fA-F0-9]{8,}", combined)}
     if returned - supplied:
         raise ValueError("agent returned a blockchain identifier absent from deterministic evidence")
-    semantic_terms=("exchange","market maker","bridge","mixer","protocol","entity","service")
+    semantic_terms=("exchange","market maker","bridge","mixer","protocol","entity","service","contract","reactor")
     deterministic=json.dumps(evidence.model_dump(mode="json")).lower()
-    unsupported=[term for term in semantic_terms if re.search(rf"\b{re.escape(term)}\b",combined.lower()) and term not in deterministic]
+    unsupported=[]
+    for term in semantic_terms:
+        for sentence in re.split(r"(?<=[.!?])\s+",combined.lower()):
+            if not re.search(rf"\b{re.escape(term)}\b",sentence) or term in deterministic:
+                continue
+            if re.search(rf"\b(?:no|not|unknown|unidentified|cannot confirm|insufficient evidence).{{0,40}}\b{re.escape(term)}\b",sentence):
+                continue
+            unsupported.append(term);break
+    allowed_technical_names={"ERC20"}
+    named=set(re.findall(r"\b[A-Z][A-Za-z0-9]*(?:[A-Z][A-Za-z0-9]*|[0-9][A-Za-z0-9]*)\b",combined))
+    unsupported_names=sorted(name for name in named-allowed_technical_names if name.lower() not in deterministic)
+    if unsupported_names:
+        raise ValueError("agent returned unsupported named entity attribution: "+", ".join(unsupported_names))
     if unsupported:
         raise ValueError("agent returned unsupported semantic attribution: "+", ".join(unsupported))
     return finding
@@ -112,10 +124,11 @@ class GoogleAdkClassifier(InvestigationClassifier):
             finding = validate_agent_finding(await run_turn(message),evidence)
         except (json.JSONDecodeError, ValidationError, ValueError) as first_error:
             correction = types.Content(role="user", parts=[types.Part(text=(
-                "Your previous structured response failed validation. Return the same required JSON schema again. "
-                "The summary and limitations must contain no wallet address, transaction hash, hexadecimal value, "
-                "number, amount, timestamp, token name, token symbol, service name, protocol name, or entity label. "
-                "Use only qualitative language. Do not call the evidence tool again."
+                "Your previous structured response failed validation. Do not call the evidence tool again. "
+                "Return the required schema with these exact safe values: classification unknown; "
+                "summary 'The supplied transaction contains confirmed token transfer activity, but the deterministic evidence is insufficient to determine the compromise mechanism.'; "
+                "confidence 0.1; evidence_references ['submitted_wallet','transaction.status','transaction.erc20_transfers']; "
+                "limitations ['Only the supplied transaction was examined.']. Add no other words or fields."
             ))])
             try:
                 finding = validate_agent_finding(await run_turn(correction),evidence)
