@@ -1,12 +1,9 @@
 name: NEMESIS verification
 
 on:
-  push:
-    branches:
-      - verify/09492618
   pull_request:
     branches:
-      - main
+      - verify/09492618
 
 jobs:
   verify:
