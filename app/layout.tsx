@@ -1,0 +1,3 @@
+import type {Metadata} from "next";import "./globals.css";
+export const metadata:Metadata={metadataBase:new URL("https://nemesis-incident-response.openai.site"),title:"NEMESIS | Autonomous Crypto Incident Response",description:"Investigate crypto theft, trace every branch, monitor dormant funds, and prepare actionable evidence.",openGraph:{title:"NEMESIS",description:"Autonomous crypto incident response",images:["/og.png"]},twitter:{card:"summary_large_image",title:"NEMESIS",description:"Autonomous crypto incident response",images:["/og.png"]},icons:{icon:"/favicon.svg",shortcut:"/favicon.svg"}};
+export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en"><body>{children}</body></html>}
