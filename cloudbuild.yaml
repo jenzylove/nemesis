@@ -1,0 +1,45 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build","-t","us-central1-docker.pkg.dev/$PROJECT_ID/nemesis/api:$BUILD_ID","backend"]
+  - name: gcr.io/cloud-builders/docker
+    args: ["push","us-central1-docker.pkg.dev/$PROJECT_ID/nemesis/api:$BUILD_ID"]
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - nemesis-api-staging
+      - --image
+      - us-central1-docker.pkg.dev/$PROJECT_ID/nemesis/api:$BUILD_ID
+      - --region
+      - ${_REGION}
+      - --platform
+      - managed
+      - --allow-unauthenticated
+      - --service-account
+      - nemesis-runtime@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars
+      - APP_ENV=production,GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=${_GEMINI_MODEL},ADK_APP_NAME=nemesis,FIRESTORE_PROJECT_ID=$PROJECT_ID,FIRESTORE_DATABASE=(default),FIRESTORE_CASES_COLLECTION=cases,CORS_ALLOWED_ORIGINS=${_CORS_ALLOWED_ORIGINS},RPC_TIMEOUT_SECONDS=20,PUBSUB_TOPIC=nemesis-case-events,CLOUD_RUN_SERVICE_URL=${_SERVICE_URL},INTERNAL_SERVICE_ACCOUNT=nemesis-runtime@$PROJECT_ID.iam.gserviceaccount.com,MONITORING_MAX_BLOCKS=20
+      - --set-secrets
+      - ETHEREUM_RPC_URL=nemesis-staging-ethereum-rpc:latest,BASE_RPC_URL=nemesis-staging-base-rpc:latest
+      - --min-instances
+      - "0"
+      - --max-instances
+      - "3"
+      - --memory
+      - 1Gi
+      - --cpu
+      - "1"
+      - --timeout
+      - "300"
+      - --concurrency
+      - "8"
+substitutions:
+  _REGION: us-central1
+  _GEMINI_MODEL: gemini-3.5-flash
+  _CORS_ALLOWED_ORIGINS: https://nemesis-incident-response.jennifereze12.chatgpt.site
+  _SERVICE_URL: https://nemesis-api-staging-h7bnd6kzfq-uc.a.run.app
+options:
+  logging: CLOUD_LOGGING_ONLY
+images:
+  - us-central1-docker.pkg.dev/$PROJECT_ID/nemesis/api:$BUILD_ID
