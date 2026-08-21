@@ -1,0 +1,5 @@
+export interface MaliciousAddressIntel{address:string;reports:number;categories:string[];source:string}
+export class ChainabuseReadAdapter{constructor(private apiKey?:string){}async lookup(address:string):Promise<MaliciousAddressIntel|null>{if(!this.apiKey)return null;const r=await fetch(`https://api.chainabuse.com/v0/reports?address=${encodeURIComponent(address)}`,{headers:{Authorization:`Bearer ${this.apiKey}`}});if(!r.ok)return null;const d=await r.json() as {count?:number;reports?:{category?:string}[]};return{address,reports:d.count||0,categories:[...new Set((d.reports||[]).map(x=>x.category||"unknown"))],source:"chainabuse"}}}
+export class BitqueryAdapter{constructor(private token?:string){}isConfigured(){return Boolean(this.token)}}
+export class GoPlusAdapter{constructor(private apiKey?:string){}isConfigured(){return Boolean(this.apiKey)}}
+export const deferredIntegrations={chainabuseWrite:"DEFERRED_REQUIRES_CONFIRMED_WRITE_ACCESS",trmBeacon:"NOT_INTEGRATED",blocksecReplay:"DEFERRED",exchangeFreeze:"OUT_OF_SCOPE",lawEnforcement:"OUT_OF_SCOPE"} as const;
