@@ -143,13 +143,15 @@ class Taskmaster:
         if tx.from_address==b.current_address and tx.to_address and int(tx.native_value_wei)>0: paths.append((tx.to_address,"native",tx.native_value_wei,"transaction.native_value_wei"))
         if not paths:
             b.status="DORMANT"; b.cursor_block=tx.block_number; b.last_transaction=tx.hash; b.last_checked=datetime.now(timezone.utc); await self.repo.save_branch(b)
-            await self._timeline(b.case_id,"BRANCH_DORMANT","Dormant wallet detected",{"branch_id":b.id,"address":b.current_address}); return {"resumed":True,"extended":False}
+            await self._timeline(b.case_id,"BRANCH_DORMANT","Dormant wallet detected",{"branch_id":b.id,"address":b.current_address})
+            await self._timeline(b.case_id,"MONITORING_ACTIVE","Monitoring active",{"branch_id":b.id}); return {"resumed":True,"extended":False}
         for index,(destination,asset,amount,ref) in enumerate(paths):
             target=b if index==0 else b.model_copy(update={"id":stable_id("BR",b.case_id,tx.hash,index,asset,destination)})
             source=b.current_address; target.current_address=destination; target.asset=asset; target.amount=amount; target.last_transaction=tx.hash; target.cursor_block=tx.block_number; target.last_checked=datetime.now(timezone.utc); target.status="DORMANT"; target.evidence_provenance=["json_rpc",ref,tx.hash]
             await self.repo.save_branch(target); await self._extend_graph(target,source,destination,tx,ref)
             if index>0: await self._timeline(b.case_id,"BRANCH_CREATED","Branch created",{"branch_id":target.id,"address":destination,"asset":asset,"amount":amount})
             await self._timeline(b.case_id,"BRANCH_DORMANT","Dormant wallet detected",{"branch_id":target.id,"address":destination})
+            await self._timeline(b.case_id,"MONITORING_ACTIVE","Monitoring active",{"branch_id":target.id})
         return {"resumed":True,"extended":True,"branches":len(paths)}
 
     async def case_trace(self,case_id):
