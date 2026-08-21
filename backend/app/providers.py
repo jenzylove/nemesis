@@ -66,5 +66,6 @@ class JsonRpcProvider(BlockchainProvider):
             for start in range(after_block+1,end+1,10):
                 logs=await self._call(chain,"eth_getLogs",[{"fromBlock":hex(start),"toBlock":hex(min(end,start+9)),"topics":topics}]) or []
                 for log in logs:
-                    h=str(log["transactionHash"]).lower();found.setdefault(h,{"transaction_hash":h,"block_number":_hex_int(log.get("blockNumber")),"kind":"erc20","direction":direction})
+                    h=str(log["transactionHash"]).lower();movement={"transaction_hash":h,"block_number":_hex_int(log.get("blockNumber")),"kind":"erc20","direction":direction}
+                    if h not in found or direction=="out":found[h]=movement
         return end,sorted(found.values(),key=lambda x:(x["block_number"],x["transaction_hash"]))
