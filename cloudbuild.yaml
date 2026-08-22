@@ -19,9 +19,9 @@ steps:
       - --service-account
       - nemesis-runtime@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars
-      - APP_ENV=production,GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=${_GEMINI_MODEL},ADK_APP_NAME=nemesis,FIRESTORE_PROJECT_ID=$PROJECT_ID,FIRESTORE_DATABASE=(default),FIRESTORE_CASES_COLLECTION=cases,CORS_ALLOWED_ORIGINS=${_CORS_ALLOWED_ORIGINS},RPC_TIMEOUT_SECONDS=20,PUBSUB_TOPIC=nemesis-case-events,CLOUD_RUN_SERVICE_URL=${_SERVICE_URL},INTERNAL_SERVICE_ACCOUNT=nemesis-runtime@$PROJECT_ID.iam.gserviceaccount.com,MONITORING_MAX_BLOCKS=20
+      - APP_ENV=production,GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=${_GEMINI_MODEL},ADK_APP_NAME=nemesis,FIRESTORE_PROJECT_ID=$PROJECT_ID,FIRESTORE_DATABASE=(default),FIRESTORE_CASES_COLLECTION=cases,CORS_ALLOWED_ORIGINS=${_CORS_ALLOWED_ORIGINS},RPC_TIMEOUT_SECONDS=20,PUBSUB_TOPIC=nemesis-case-events,CLOUD_RUN_SERVICE_URL=${_SERVICE_URL},INTERNAL_SERVICE_ACCOUNT=nemesis-runtime@$PROJECT_ID.iam.gserviceaccount.com,MONITORING_MAX_BLOCKS=20,BITQUERY_ENDPOINT=https://streaming.bitquery.io/graphql,DISCOVERY_CANDIDATE_LIMIT=100,GOPLUS_BASE_URL=https://api.gopluslabs.io/api/v1,CHAINABUSE_BASE_URL=https://api.chainabuse.com/v0
       - --set-secrets
-      - ETHEREUM_RPC_URL=nemesis-staging-ethereum-rpc:latest,BASE_RPC_URL=nemesis-staging-base-rpc:latest
+      - ETHEREUM_RPC_URL=nemesis-staging-ethereum-rpc:latest,BASE_RPC_URL=nemesis-staging-base-rpc:latest,BITQUERY_ACCESS_TOKEN=nemesis-staging-bitquery-token:latest
       - --min-instances
       - "0"
       - --max-instances
