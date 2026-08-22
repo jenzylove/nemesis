@@ -2,14 +2,38 @@
 
 Autonomous crypto incident response for tracing stolen funds with deterministic blockchain evidence, persistent monitoring, and evidence-grounded agent reasoning.
 
-Public frontend: https://nemesis-incident-response.jennifereze12.chatgpt.site
+Current published preview: https://nemesis-incident-response.jennifereze12.chatgpt.site
+
+The repository is the source of truth. The published preview may lag behind `main` until the frontend is republished or moved to the production hosting path.
 
 ## What NEMESIS does
 
-A user submits a wallet address, supported chain, and confirmed theft transaction hash. NEMESIS then:
+A user starts with a supported chain and affected wallet address. A known theft transaction hash is optional.
+
+### Known transaction path
+
+If the user already knows the theft transaction, NEMESIS immediately retrieves and verifies the transaction through real Ethereum or Base JSON RPC, then continues into the existing trace pipeline.
+
+### Wallet-only discovery path
+
+If the transaction hash is not known, NEMESIS first performs deterministic incident discovery:
+
+1. Bitquery retrieves indexed historical wallet transfer activity.
+2. NEMESIS groups outgoing activity by transaction and ranks candidates using deterministic signals such as wallet outflow, value, transfer count, caller relationship, and proximity to the optional reported incident time.
+3. GoPlus can add malicious-address risk flags to leading candidate counterparties.
+4. Chainabuse can add public abuse-report evidence to the leading candidate. Results are cached and calls are deliberately limited.
+5. The selected candidate is fetched again through Ethereum/Base JSON RPC.
+6. NEMESIS refuses to proceed unless the RPC transaction itself contains deterministic value leaving the submitted wallet.
+7. Only after RPC verification does the normal evidence, tracing, Taskmaster, and Gemini workflow continue.
+
+Gemini does not choose or invent the theft transaction. The discovery decision is made from indexed deterministic records and then independently verified by RPC.
+
+## Core investigation pipeline
+
+After a transaction is known or discovered, NEMESIS:
 
 1. Retrieves the transaction, receipt, containing block, native value, and ERC20 transfer logs through real Ethereum or Base JSON RPC.
-2. Normalizes and persists deterministic evidence before any model interpretation.
+2. Normalizes and persists deterministic evidence before model interpretation.
 3. Runs the NEMESIS root agent through Google ADK and Gemini 3.5 Flash on Vertex AI.
 4. Creates persisted trace branches for qualifying fund movement.
 5. Recursively follows deterministic multi-hop movement.
@@ -18,7 +42,7 @@ A user submits a wallet address, supported chain, and confirmed theft transactio
 8. Uses Cloud Scheduler and Pub/Sub to recheck dormant branches and automatically resume tracing when confirmed movement appears.
 9. Persists the graph, timeline, branch state, and provenance to Firestore for the frontend to display.
 
-NEMESIS is not a chatbot wrapped around an RPC call. Gemini is deliberately kept downstream of the deterministic evidence layer and cannot replace blockchain facts.
+NEMESIS is not a chatbot wrapped around an RPC call. Gemini is deliberately kept downstream of deterministic evidence and cannot replace blockchain facts.
 
 ## Production stack
 
@@ -31,13 +55,17 @@ NEMESIS is not a chatbot wrapped around an RPC call. Gemini is deliberately kept
 - Eventing: Google Cloud Pub/Sub
 - Monitoring trigger: Google Cloud Scheduler
 - Blockchain evidence: Ethereum and Base JSON RPC
+- Incident discovery: Bitquery indexed EVM history
+- Risk enrichment: GoPlus and Chainabuse
 - Attribution: deterministic curated provider with guardrails
 
 ## Real and synthetic paths
 
 ### Real investigation
 
-The real form posts `wallet_address`, `chain`, and `theft_transaction_hash` to the FastAPI backend. The backend retrieves live RPC evidence, persists it, invokes ADK/Gemini, creates trace state, and exposes the persisted graph and timeline to the case workspace.
+The real form accepts `wallet_address`, `chain`, an optional `theft_transaction_hash`, and an optional approximate `incident_time`.
+
+A supplied hash uses the direct RPC path. A missing hash activates the Bitquery discovery path before RPC verification. The backend then persists evidence, invokes ADK/Gemini, creates trace state, and exposes the persisted graph and timeline to the case workspace.
 
 ### Deterministic demo
 
@@ -45,11 +73,11 @@ The demo is a controlled synthetic scenario for presenting a complete split, swa
 
 Synthetic demo state is labelled as such and is separate from the real RPC workflow.
 
-## Verified cloud release
+## Verified cloud baseline
 
-On 2026-08-22 the integrated backend passed 33 backend tests and was deployed successfully to Cloud Run.
+On 2026-08-22 the previously integrated backend passed 33 backend tests and was deployed successfully to Cloud Run.
 
-Cloud verification included:
+That cloud verification included:
 
 - real Ethereum investigation
 - real Base investigation
@@ -69,6 +97,8 @@ Cloud verification included:
 - Gemini 3.5 Flash through Vertex AI `global`
 - validated structured findings
 
+The newer wallet-only discovery, Bitquery, GoPlus, and Chainabuse source changes are not yet represented by that cloud baseline. They must be tested with the current suite and then deployed and verified before being described as cloud verified.
+
 No universal bridge-resolution claim is made. No exchange customer identity, KYC, UID, freeze, cooperation, or guaranteed recovery is claimed.
 
 ## Current integration status
@@ -77,7 +107,7 @@ No universal bridge-resolution claim is made. No exchange customer identity, KYC
 | --- | --- |
 | Ethereum JSON RPC | Implemented and cloud verified |
 | Base JSON RPC | Implemented and cloud verified |
-| Cloud Run | Implemented and deployed |
+| Cloud Run | Existing backend deployed; current source update pending redeploy |
 | Firestore | Implemented and cloud verified |
 | Google ADK | Implemented and cloud verified |
 | Gemini 3.5 Flash / Vertex AI | Implemented and cloud verified |
@@ -89,14 +119,33 @@ No universal bridge-resolution claim is made. No exchange customer identity, KYC
 | Dormant monitoring / autonomous resume | Implemented and cloud verified |
 | Deterministic attribution guardrails | Implemented |
 | Supported bridge evidence | Implemented with deterministic limits |
-| Bitquery / Coinpath | Planned, not currently active |
-| GoPlus | Planned, not currently active |
-| BlockSec | Planned, not currently active |
-| Chainabuse | Planned, not currently active |
-| TRM Beacon | Approval-dependent, not currently active |
+| Wallet-only incident discovery | Implemented in source; deployment verification pending |
+| Bitquery | Implemented in source for historical wallet discovery; credential/deployment verification pending |
+| GoPlus | Implemented in source as best-effort malicious-address enrichment; live verification pending |
+| Chainabuse | Implemented in source with cached, call-conservative screening; credential/deployment verification pending |
+| BlockSec | Planned after deployment verification |
+| TRM Beacon | Approval-dependent; planned after deployment verification |
 | BigQuery | Not used by the deployed runtime |
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the system flow, autonomy loop, persistence model, integration boundaries, and current limitations.
+
+## Configuration
+
+Copy `.env.example` to `.env` for local development. Do not commit real provider credentials.
+
+Wallet-only discovery uses:
+
+```text
+BITQUERY_ACCESS_TOKEN=
+BITQUERY_ENDPOINT=https://streaming.bitquery.io/graphql
+DISCOVERY_CANDIDATE_LIMIT=100
+GOPLUS_BASE_URL=https://api.gopluslabs.io/api/v1
+GOPLUS_ACCESS_TOKEN=
+CHAINABUSE_API_KEY=
+CHAINABUSE_BASE_URL=https://api.chainabuse.com/v0
+```
+
+`GOPLUS_ACCESS_TOKEN` is optional for the current best-effort integration. Production provider secrets should live in the deployment secret store rather than the repository.
 
 ## Local backend
 
@@ -108,9 +157,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-From the repository root, copy `.env.example` to `.env` and configure the required values.
-
-Production mode refuses to start unless the deterministic RPC, Firestore, and Gemini/Vertex configuration is present. Local development may use the explicit in-memory fallback where supported.
+Production mode refuses to start unless the deterministic RPC, Firestore, and Gemini/Vertex configuration is present. Wallet-only investigations additionally require a configured Bitquery token; the known-transaction path does not.
 
 Run the frontend with:
 
@@ -125,19 +172,30 @@ backend/.venv/bin/pytest -q backend/tests
 npm test
 ```
 
-## Google Cloud deployment
+`backend/tests/test_incident_discovery.py` covers wallet-only workflow selection, RPC verification, Bitquery ranking, GoPlus normalization/caching, and Chainabuse authentication/caching.
 
-The FastAPI backend ships with a non-root Cloud Run container, `cloudbuild.yaml`, and `infra/bootstrap-gcp.sh`.
+## Deployment direction
 
-1. Select a Google Cloud project with billing enabled.
-2. Configure `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and the required runtime settings.
-3. Create the Firestore Native database.
-4. Store Ethereum and Base RPC URLs in Secret Manager.
-5. Submit the backend build with `gcloud builds submit --config cloudbuild.yaml .`.
-6. Configure the frontend with the deployed Cloud Run API URL.
-7. Publish the frontend and verify the complete browser-to-API flow.
+The intended production request path is:
 
-The runtime service account needs the minimum roles required for Firestore, Vertex AI, and Secret Manager. Scheduler and Pub/Sub endpoints remain protected even while the public investigation API is reachable from the approved frontend origin.
+```text
+Production frontend
+        |
+        v
+Google Cloud Run API
+        |
+        +--> Ethereum / Base JSON RPC
+        +--> Bitquery
+        +--> GoPlus
+        +--> Chainabuse
+        +--> Firestore
+        +--> Google ADK / Gemini
+        +--> Pub/Sub / Cloud Scheduler
+```
+
+The production frontend should call Cloud Run directly. The ChatGPT Site preview is not part of the intended production request path.
+
+The FastAPI backend ships with a non-root Cloud Run container, `cloudbuild.yaml`, and `infra/bootstrap-gcp.sh`. After the new production frontend URL exists, add that origin to `CORS_ALLOWED_ORIGINS`, add the Bitquery and Chainabuse credentials through the deployment secret configuration, redeploy the current commit, and verify a wallet-only browser investigation end to end.
 
 ## Safety boundary
 
