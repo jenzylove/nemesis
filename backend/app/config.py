@@ -16,6 +16,16 @@ class Settings(BaseSettings):
     ethereum_rpc_url: str = ""
     base_rpc_url: str = ""
     rpc_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+
+    # Wallet-only incident discovery and best-effort enrichment.
+    bitquery_access_token: str = ""
+    bitquery_endpoint: str = "https://streaming.bitquery.io/graphql"
+    discovery_candidate_limit: int = Field(default=100, ge=10, le=500)
+    goplus_base_url: str = "https://api.gopluslabs.io/api/v1"
+    goplus_access_token: str = ""
+    chainabuse_api_key: str = ""
+    chainabuse_base_url: str = "https://api.chainabuse.com/v0"
+
     firestore_project_id: str = ""
     firestore_database: str = "(default)"
     firestore_cases_collection: str = "cases"
@@ -40,9 +50,12 @@ class Settings(BaseSettings):
         if self.app_env != "production":
             return self
         missing = []
-        if not self.ethereum_rpc_url: missing.append("ETHEREUM_RPC_URL")
-        if not self.base_rpc_url: missing.append("BASE_RPC_URL")
-        if not self.firestore_project_id: missing.append("FIRESTORE_PROJECT_ID")
+        if not self.ethereum_rpc_url:
+            missing.append("ETHEREUM_RPC_URL")
+        if not self.base_rpc_url:
+            missing.append("BASE_RPC_URL")
+        if not self.firestore_project_id:
+            missing.append("FIRESTORE_PROJECT_ID")
         if not (self.google_api_key or self.google_genai_use_vertexai):
             missing.append("GOOGLE_API_KEY or GOOGLE_GENAI_USE_VERTEXAI=TRUE")
         if self.google_genai_use_vertexai and not self.google_cloud_project:
