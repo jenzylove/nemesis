@@ -1,14 +1,102 @@
 # NEMESIS
 
-Working MVP for autonomous crypto incident response.
+Autonomous crypto incident response for tracing stolen funds with deterministic blockchain evidence, persistent monitoring, and evidence-grounded agent reasoning.
 
-## Real vertical slice
+Public frontend: https://nemesis-incident-response.jennifereze12.chatgpt.site
 
-The real form sends wallet, chain, and theft transaction hash to FastAPI. The backend creates a case, loads the transaction and receipt through Ethereum or Base JSON RPC, loads the containing block timestamp, decodes ERC20 Transfer logs, persists deterministic evidence, then invokes the NEMESIS root agent through Google ADK and Gemini. The response keeps RPC facts separate from the agent finding.
+## What NEMESIS does
 
-## Synthetic demo
+A user submits a wallet address, supported chain, and confirmed theft transaction hash. NEMESIS then:
 
-Select **Run deterministic demo instead** to exercise the existing controlled fund split, swap, bridge, dormant branch, and actionable destination sequence. Demo facts are explicitly labelled synthetic and do not enter the real RPC workflow.
+1. Retrieves the transaction, receipt, containing block, native value, and ERC20 transfer logs through real Ethereum or Base JSON RPC.
+2. Normalizes and persists deterministic evidence before any model interpretation.
+3. Runs the NEMESIS root agent through Google ADK and Gemini 3.5 Flash on Vertex AI.
+4. Creates persisted trace branches for qualifying fund movement.
+5. Recursively follows deterministic multi-hop movement.
+6. Handles supported splits, residual branches, swaps, and bridge evidence without inventing unsupported paths.
+7. Marks quiet branches dormant and keeps them in persistent monitoring state.
+8. Uses Cloud Scheduler and Pub/Sub to recheck dormant branches and automatically resume tracing when confirmed movement appears.
+9. Persists the graph, timeline, branch state, and provenance to Firestore for the frontend to display.
+
+NEMESIS is not a chatbot wrapped around an RPC call. Gemini is deliberately kept downstream of the deterministic evidence layer and cannot replace blockchain facts.
+
+## Production stack
+
+- Frontend: React / Next-compatible app built with Vinext
+- API: FastAPI
+- Runtime: Google Cloud Run, `us-central1`
+- Persistence: Firestore
+- Agent framework: Google ADK
+- Model: Gemini 3.5 Flash through Vertex AI `global`
+- Eventing: Google Cloud Pub/Sub
+- Monitoring trigger: Google Cloud Scheduler
+- Blockchain evidence: Ethereum and Base JSON RPC
+- Attribution: deterministic curated provider with guardrails
+
+## Real and synthetic paths
+
+### Real investigation
+
+The real form posts `wallet_address`, `chain`, and `theft_transaction_hash` to the FastAPI backend. The backend retrieves live RPC evidence, persists it, invokes ADK/Gemini, creates trace state, and exposes the persisted graph and timeline to the case workspace.
+
+### Deterministic demo
+
+The demo is a controlled synthetic scenario for presenting a complete split, swap, bridge, dormant-monitoring, movement-resume, and actionable-destination story without pretending those demo facts came from a live theft.
+
+Synthetic demo state is labelled as such and is separate from the real RPC workflow.
+
+## Verified cloud release
+
+On 2026-08-22 the integrated backend passed 33 backend tests and was deployed successfully to Cloud Run.
+
+Cloud verification included:
+
+- real Ethereum investigation
+- real Base investigation
+- deterministic ERC20 decoding
+- persisted trace branches
+- persisted graph nodes and edges
+- persisted case timeline
+- deterministic split and swap detection
+- dormant monitoring registration
+- Cloud Scheduler recheck
+- authenticated Pub/Sub event callbacks
+- confirmed movement detection
+- automatic trace resume
+- graph extension after resume
+- persistent dormant state after continued tracing
+- Google ADK Runner execution
+- Gemini 3.5 Flash through Vertex AI `global`
+- validated structured findings
+
+No universal bridge-resolution claim is made. No exchange customer identity, KYC, UID, freeze, cooperation, or guaranteed recovery is claimed.
+
+## Current integration status
+
+| Integration | Status |
+| --- | --- |
+| Ethereum JSON RPC | Implemented and cloud verified |
+| Base JSON RPC | Implemented and cloud verified |
+| Cloud Run | Implemented and deployed |
+| Firestore | Implemented and cloud verified |
+| Google ADK | Implemented and cloud verified |
+| Gemini 3.5 Flash / Vertex AI | Implemented and cloud verified |
+| Pub/Sub | Implemented and cloud verified |
+| Cloud Scheduler | Implemented and cloud verified |
+| Multi-hop tracing | Implemented and cloud verified |
+| Fund splits | Implemented and cloud verified |
+| Swap detection | Implemented and exercised in verification |
+| Dormant monitoring / autonomous resume | Implemented and cloud verified |
+| Deterministic attribution guardrails | Implemented |
+| Supported bridge evidence | Implemented with deterministic limits |
+| Bitquery / Coinpath | Planned, not currently active |
+| GoPlus | Planned, not currently active |
+| BlockSec | Planned, not currently active |
+| Chainabuse | Planned, not currently active |
+| TRM Beacon | Approval-dependent, not currently active |
+| BigQuery | Not used by the deployed runtime |
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the system flow, autonomy loop, persistence model, integration boundaries, and current limitations.
 
 ## Local backend
 
@@ -20,9 +108,15 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-From the repository root, copy `.env.example` to `.env` and export its values. The backend uses process memory only when `FIRESTORE_PROJECT_ID` is absent. Production mode refuses to start unless both RPC URLs, Firestore, and either Vertex AI or a Gemini API key are configured. ADK uses the Gemini API when `GOOGLE_API_KEY` exists or Vertex AI when `GOOGLE_GENAI_USE_VERTEXAI=TRUE`.
+From the repository root, copy `.env.example` to `.env` and configure the required values.
 
-Run the frontend with `NEXT_PUBLIC_NEMESIS_API_URL=http://localhost:8080 npm run dev`.
+Production mode refuses to start unless the deterministic RPC, Firestore, and Gemini/Vertex configuration is present. Local development may use the explicit in-memory fallback where supported.
+
+Run the frontend with:
+
+```bash
+NEXT_PUBLIC_NEMESIS_API_URL=http://localhost:8080 npm run dev
+```
 
 ## Tests
 
@@ -31,29 +125,32 @@ backend/.venv/bin/pytest -q backend/tests
 npm test
 ```
 
-## Google Cloud production
+## Google Cloud deployment
 
-The frontend is deployed through Sites. The FastAPI runtime includes a non-root Cloud Run container, `cloudbuild.yaml`, and `infra/bootstrap-gcp.sh`.
-
-Taskmaster uses Firestore collections `monitoring_branches`, `processed_events`, and `case_timeline`. Cloud Scheduler publishes periodic rechecks through the protected monitoring endpoint. Pub/Sub delivers authenticated events to the protected event endpoint. Event document creation is the idempotency boundary, and a detected transaction produces a persistent `MOVEMENT_DETECTED` event followed by `TRACE_RESUMED` after deterministic RPC normalization.
+The FastAPI backend ships with a non-root Cloud Run container, `cloudbuild.yaml`, and `infra/bootstrap-gcp.sh`.
 
 1. Select a Google Cloud project with billing enabled.
-2. Set `GOOGLE_CLOUD_PROJECT` and optionally `GOOGLE_CLOUD_LOCATION`, then run `infra/bootstrap-gcp.sh`.
-3. Create the Firestore Native database once. Its location is permanent, so choose it deliberately.
-4. Add RPC URLs without printing them:
+2. Configure `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and the required runtime settings.
+3. Create the Firestore Native database.
+4. Store Ethereum and Base RPC URLs in Secret Manager.
+5. Submit the backend build with `gcloud builds submit --config cloudbuild.yaml .`.
+6. Configure the frontend with the deployed Cloud Run API URL.
+7. Publish the frontend and verify the complete browser-to-API flow.
 
-```bash
-printf '%s' "$ETHEREUM_RPC_URL" | gcloud secrets versions add nemesis-staging-ethereum-rpc --data-file=-
-printf '%s' "$BASE_RPC_URL" | gcloud secrets versions add nemesis-staging-base-rpc --data-file=-
-```
-
-5. Submit the build with `gcloud builds submit --config cloudbuild.yaml .`.
-6. Set `NEXT_PUBLIC_NEMESIS_API_URL` to the resulting Cloud Run URL and publish the frontend again.
-
-The runtime service account needs `roles/datastore.user`, `roles/aiplatform.user`, and `roles/secretmanager.secretAccessor`. The Cloud Build service account also needs permission to deploy Cloud Run and act as `nemesis-runtime`.
+The runtime service account needs the minimum roles required for Firestore, Vertex AI, and Secret Manager. Scheduler and Pub/Sub endpoints remain protected even while the public investigation API is reachable from the approved frontend origin.
 
 ## Safety boundary
 
-NEMESIS traces onchain evidence. It does not claim an exchange account holder, UID, email, KYC identity, exchange cooperation, a freeze, law enforcement action, or guaranteed recovery.
+NEMESIS traces onchain evidence and prepares structured evidence for escalation.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+It does **not** claim:
+
+- a thief's real-world identity from an address alone
+- exchange account holder details
+- customer UID, email, or KYC access
+- fund freezing
+- law-enforcement action
+- exchange cooperation
+- guaranteed asset recovery
+
+Every production claim should remain tied to evidence the deployed system can actually prove.
