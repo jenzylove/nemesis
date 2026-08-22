@@ -54,9 +54,9 @@ gcloud iam service-accounts add-iam-policy-binding "${RUNTIME_ACCOUNT}" \
 gcloud firestore databases describe --database='(default)' >/dev/null 2>&1 || \
   gcloud firestore databases create --database='(default)' --location="${FIRESTORE_LOCATION}" --type=firestore-native
 
-for secret in nemesis-staging-ethereum-rpc nemesis-staging-base-rpc; do
+for secret in nemesis-staging-ethereum-rpc nemesis-staging-base-rpc nemesis-staging-bitquery-token; do
   gcloud secrets describe "${secret}" >/dev/null 2>&1 || \
     gcloud secrets create "${secret}" --replication-policy automatic
 done
 
-echo "Infrastructure ready. Add one version to each staging RPC secret, then submit cloudbuild.yaml."
+echo "Infrastructure ready. Add one version to each staging RPC secret and nemesis-staging-bitquery-token, then submit cloudbuild.yaml."
