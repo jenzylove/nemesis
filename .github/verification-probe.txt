@@ -1,0 +1,1 @@
+Temporary pull-request probe used to expose GitHub Actions results for the current verified main source. No runtime code changes.
