@@ -1,0 +1,5 @@
+.brand{display:inline-flex;align-items:center;gap:10px}
+.brand .brandMark{display:inline-block!important;width:48px!important;height:28px!important;min-width:48px!important;padding:0!important;margin:0!important;border:0!important;border-radius:0!important;background:url('/nemesis-mark.svg') center/contain no-repeat!important;box-shadow:none!important;color:transparent!important;font-size:0!important;line-height:0!important;text-indent:-9999px!important;overflow:hidden!important}
+.brand>span:last-child{letter-spacing:.16em;font-weight:700}
+.casePage .brand .brandMark,.intake .brand .brandMark,.productFrame .brand .brandMark,.landing footer .brand .brandMark{background-image:url('/nemesis-mark-inverse.svg')!important}
+@media(max-width:640px){.brand .brandMark{width:42px!important;height:24px!important;min-width:42px!important}.brand>span:last-child{letter-spacing:.12em}}
