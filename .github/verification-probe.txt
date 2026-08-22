@@ -1,0 +1,1 @@
+Temporary pull-request probe used to expose GitHub Actions results for current main after deployment-config fixes. No runtime code changes.
