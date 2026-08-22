@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import math
 from typing import Any
 
@@ -11,6 +11,7 @@ from .models import ChainName, DiscoveryCandidate, IncidentDiscovery
 
 BITQUERY_NETWORKS: dict[ChainName, str] = {"ethereum": "eth", "base": "base"}
 GOPLUS_CHAIN_IDS: dict[ChainName, str] = {"ethereum": "1", "base": "8453"}
+DISCOVERY_TIME_WINDOW = timedelta(days=7)
 
 GOPLUS_RISK_KEYS = {
     "blackmail_activities",
@@ -47,6 +48,10 @@ def _as_utc(value: datetime | None) -> datetime | None:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def _bitquery_time(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _truthy_flag(value: Any) -> bool:
@@ -205,17 +210,24 @@ class BitqueryIncidentDiscovery:
         self.chainabuse = chainabuse
         self.transport = transport
 
-    def _query(self, network: str) -> str:
+    def _query(self, network: str, time_scoped: bool = False) -> str:
+        variables = "$wallet: String!"
+        block_filter = ""
+        if time_scoped:
+            variables += ", $since: DateTime!, $till: DateTime!"
+            block_filter = "\n        Block: {Time: {since: $since, till: $till}}"
         return f"""
-query WalletIncidentHistory($wallet: String!) {{
+query WalletIncidentHistory({variables}) {{
   EVM(dataset: archive, network: {network}) {{
     Transfers(
       limit: {{count: {self.candidate_limit}}}
       orderBy: {{descending: Block_Time}}
-      where: {{any: [
-        {{Transfer: {{Sender: {{is: $wallet}}}}}},
-        {{Transfer: {{Receiver: {{is: $wallet}}}}}}
-      ]}}
+      where: {{
+        any: [
+          {{Transfer: {{Sender: {{is: $wallet}}}}}},
+          {{Transfer: {{Receiver: {{is: $wallet}}}}}}
+        ]{block_filter}
+      }}
     ) {{
       Block {{ Time Number }}
       Transaction {{ Hash From To }}
@@ -232,11 +244,23 @@ query WalletIncidentHistory($wallet: String!) {{
 }}
 """.strip()
 
-    async def _history(self, chain: ChainName, wallet: str) -> list[dict]:
+    async def _history(
+        self,
+        chain: ChainName,
+        wallet: str,
+        incident_time: datetime | None = None,
+    ) -> list[dict]:
         if not self.access_token:
             raise DiscoveryUnavailableError(
                 "Wallet-only discovery requires BITQUERY_ACCESS_TOKEN. Add a theft transaction hash or configure Bitquery."
             )
+
+        incident_time = _as_utc(incident_time)
+        variables: dict[str, str] = {"wallet": wallet.lower()}
+        if incident_time:
+            variables["since"] = _bitquery_time(incident_time - DISCOVERY_TIME_WINDOW)
+            variables["till"] = _bitquery_time(incident_time + DISCOVERY_TIME_WINDOW)
+
         try:
             async with httpx.AsyncClient(
                 timeout=self.timeout_seconds, transport=self.transport
@@ -244,8 +268,10 @@ query WalletIncidentHistory($wallet: String!) {{
                 response = await client.post(
                     self.endpoint,
                     json={
-                        "query": self._query(BITQUERY_NETWORKS[chain]),
-                        "variables": {"wallet": wallet.lower()},
+                        "query": self._query(
+                            BITQUERY_NETWORKS[chain], time_scoped=incident_time is not None
+                        ),
+                        "variables": variables,
                     },
                     headers={
                         "authorization": f"Bearer {self.access_token}",
@@ -375,7 +401,7 @@ query WalletIncidentHistory($wallet: String!) {{
         self, chain: ChainName, wallet: str, incident_time: datetime | None = None
     ) -> IncidentDiscovery:
         candidates = self._build_candidates(
-            await self._history(chain, wallet), wallet, incident_time
+            await self._history(chain, wallet, incident_time), wallet, incident_time
         )
         if not candidates:
             raise IncidentNotFoundError(
