@@ -38,14 +38,16 @@ jobs:
         env:
           NEXT_PUBLIC_NEMESIS_API_URL: https://nemesis-api-staging-h7bnd6kzfq-uc.a.run.app
 
-  package-backend:
+  package-deploy:
     needs: [backend, frontend]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/upload-artifact@v4
         with:
-          name: nemesis-backend-b7d3d95
-          path: backend
+          name: nemesis-deploy-b7d3d95
+          path: |
+            backend
+            cloudbuild.yaml
           if-no-files-found: error
           retention-days: 1
