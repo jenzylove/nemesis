@@ -28,7 +28,7 @@ test("renders the Nemesis investigation entry point and production metadata", as
   );
   const html = await response.text();
   assert.match(html, /<title>NEMESIS \| Autonomous Crypto Incident Response<\/title>/);
-  assert.match(html, /Your crypto was stolen/);
-  assert.match(html, /DETERMINISTIC TRACE/);
+  assert.match(html, /Trace stolen crypto/);
+  assert.match(html, /Deterministic Evidence/);
   assert.doesNotMatch(html, /codex-preview/);
 });
