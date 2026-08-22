@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 
 import httpx
 import pytest
@@ -99,6 +100,13 @@ async def test_wallet_only_workflow_discovers_then_rpc_verifies_transaction():
 
 def bitquery_handler(request: httpx.Request) -> httpx.Response:
     assert request.headers["authorization"] == "Bearer ory_fixture"
+    body = json.loads(request.content)
+    variables = body["variables"]
+    assert variables["wallet"] == WALLET
+    assert variables["since"] == "2026-08-15T12:00:00Z"
+    assert variables["till"] == "2026-08-29T12:00:00Z"
+    assert "$since: DateTime!" in body["query"]
+    assert "Block: {Time: {since: $since, till: $till}}" in body["query"]
     return httpx.Response(
         200,
         json={
@@ -135,7 +143,7 @@ def bitquery_handler(request: httpx.Request) -> httpx.Response:
 
 
 @pytest.mark.asyncio
-async def test_bitquery_history_ranks_incident_near_reported_time():
+async def test_bitquery_history_ranks_incident_near_reported_time_and_scopes_query():
     discovery = BitqueryIncidentDiscovery(
         access_token="ory_fixture",
         transport=httpx.MockTransport(bitquery_handler),
@@ -148,6 +156,23 @@ async def test_bitquery_history_ranks_incident_near_reported_time():
     assert result.selected_transaction_hash == TX_HASH
     assert result.candidate_count == 1
     assert any("reported incident time" in reason for reason in result.candidates[0].reasons)
+
+
+@pytest.mark.asyncio
+async def test_bitquery_history_without_incident_time_does_not_force_time_filter():
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["variables"] == {"wallet": WALLET}
+        assert "$since" not in body["query"]
+        assert "Block: {Time:" not in body["query"]
+        return httpx.Response(200, json={"data": {"EVM": {"Transfers": []}}})
+
+    discovery = BitqueryIncidentDiscovery(
+        access_token="ory_fixture",
+        transport=httpx.MockTransport(handler),
+    )
+    with pytest.raises(LookupError):
+        await discovery.discover("ethereum", WALLET)
 
 
 @pytest.mark.asyncio
