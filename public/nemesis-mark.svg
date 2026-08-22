@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 64" fill="none" role="img" aria-label="NEMESIS split-route mark">
+  <g stroke-linecap="round" stroke-linejoin="round" stroke-width="6">
+    <path d="M6 32h27" stroke="#0A1220"/>
+    <circle cx="38" cy="32" r="7" stroke="#0A1220" fill="#F7F9FC"/>
+    <path d="M45 32h8L70 14h23" stroke="#2563FF"/>
+    <path d="M53 32h40" stroke="#2563FF"/>
+    <path d="M45 32h8L70 50h23" stroke="#0A1220"/>
+    <circle cx="101" cy="14" r="6" stroke="#2563FF" fill="#F7F9FC"/>
+    <circle cx="101" cy="32" r="6" stroke="#2563FF" fill="#F7F9FC"/>
+    <circle cx="101" cy="50" r="6" stroke="#0A1220" fill="#F7F9FC"/>
+  </g>
+</svg>
