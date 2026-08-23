@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     firestore_project_id: str = ""
     firestore_database: str = "(default)"
     firestore_cases_collection: str = "cases"
+    firebase_project_id: str = ""
     google_cloud_project: str = ""
     google_cloud_location: str = "global"
     google_api_key: str = ""
