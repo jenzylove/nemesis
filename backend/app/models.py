@@ -4,13 +4,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ChainName = Literal["ethereum", "base"]
+ChainSelection = Literal["auto", "ethereum", "base"]
 
 
 class CaseCreate(BaseModel):
     wallet_address: str = Field(
         min_length=42, max_length=42, pattern=r"^0x[a-fA-F0-9]{40}$"
     )
-    chain: ChainName
+    chain: ChainSelection = "auto"
     theft_transaction_hash: str | None = Field(
         default=None, min_length=66, max_length=66, pattern=r"^0x[a-fA-F0-9]{64}$"
     )
@@ -112,7 +113,7 @@ class InvestigationCase(BaseModel):
     created_at: datetime
     updated_at: datetime
     wallet_address: str
-    chain: ChainName
+    chain: ChainSelection
     theft_transaction_hash: str | None = None
     discovery: IncidentDiscovery | None = None
     evidence: DeterministicEvidence | None = None
