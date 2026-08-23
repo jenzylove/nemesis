@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     rpc_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
 
     # Wallet-only incident discovery and best-effort enrichment.
+    alchemy_api_key: str = ""
+    alchemy_discovery_max_pages: int = Field(default=20, ge=1, le=100)
     bitquery_access_token: str = ""
     bitquery_endpoint: str = "https://streaming.bitquery.io/graphql"
     discovery_candidate_limit: int = Field(default=100, ge=10, le=500)
