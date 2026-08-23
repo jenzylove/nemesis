@@ -1,0 +1,1 @@
+Temporary CI probe for validated Bitquery realtime cursor query.
