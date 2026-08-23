@@ -1,0 +1,19 @@
+/* Restrained motion layer: preserve the editorial layout, add depth and pacing. */
+@media (prefers-reduced-motion:no-preference){
+ .landing .artifact{will-change:transform;animation-duration:7s;animation-timing-function:ease-in-out;animation-iteration-count:infinite;animation-direction:alternate}
+ .landing .artifactWallet,.landing .artifactGraph,.landing .artifactEvidence{animation-name:nemesisFloatA}
+ .landing .artifactEth,.landing .artifactTx,.landing .artifactMovement{animation-name:nemesisFloatB}
+ .landing .artifactBase,.landing .artifactDormant{animation-name:nemesisFloatC}
+ .landing .artifactGraph{animation-delay:-1.2s}.landing .artifactTx{animation-delay:-2.4s}.landing .artifactBase{animation-delay:-3.1s}.landing .artifactDormant{animation-delay:-1.8s}.landing .artifactMovement{animation-delay:-4s}.landing .artifactEvidence{animation-delay:-2.8s}
+ .capabilityGrid .reveal:nth-child(2){animation-range:entry 12% cover 31%}.capabilityGrid .reveal:nth-child(3){animation-range:entry 16% cover 34%}.capabilityGrid .reveal:nth-child(4){animation-range:entry 20% cover 37%}.capabilityGrid .reveal:nth-child(5){animation-range:entry 24% cover 40%}
+ .proofGrid .reveal:nth-child(3n+2){animation-range:entry 13% cover 32%}.proofGrid .reveal:nth-child(3n){animation-range:entry 18% cover 36%}
+ .evidenceFlow.reveal>div,.evidenceFlow.reveal>i{animation:nemesisStepIn linear both;animation-timeline:view();animation-range:entry 12% cover 33%}
+ .evidenceFlow.reveal>i:nth-child(2){animation-range:entry 16% cover 35%}.evidenceFlow.reveal>div:nth-child(3){animation-range:entry 20% cover 38%}.evidenceFlow.reveal>i:nth-child(4){animation-range:entry 24% cover 41%}.evidenceFlow.reveal>div:nth-child(5){animation-range:entry 28% cover 44%}
+ .landing .primary,.navCta,.productTop button{transition:transform .22s ease,background-color .22s ease,border-color .22s ease,box-shadow .22s ease}
+ .landing .primary:hover,.navCta:hover,.productTop button:hover{transform:translateY(-2px)}
+}
+@keyframes nemesisFloatA{from{translate:0 0}to{translate:0 -8px}}
+@keyframes nemesisFloatB{from{translate:0 0}to{translate:5px -6px}}
+@keyframes nemesisFloatC{from{translate:0 0}to{translate:-4px -7px}}
+@keyframes nemesisStepIn{from{opacity:.05;transform:translateY(28px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:560px){.landing .artifact{animation:none}}
