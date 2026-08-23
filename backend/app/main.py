@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from .agent_runtime import classifier_from_settings
 from .alchemy_discovery import AlchemyIncidentDiscovery
-from .auth import require_user
+from .auth import require_case_user, require_user
 from .config import get_settings
 from .discovery import (
     ChainabuseClient,
@@ -188,7 +188,7 @@ async def health():
 
 
 @app.post("/v1/cases", response_model=CaseResponse, status_code=201)
-async def create_case(body: CaseCreate, user: dict = Depends(require_user)):
+async def create_case(body: CaseCreate, user: dict = Depends(require_case_user)):
     try:
         response = await workflow.create_and_investigate(body)
         response.case.owner_user_id = user["sub"]
