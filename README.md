@@ -1,214 +1,155 @@
 # NEMESIS
 
-Autonomous crypto incident response for tracing stolen funds with deterministic blockchain evidence, persistent monitoring, and evidence-grounded agent reasoning.
+**Autonomous crypto incident response for tracing stolen funds, preserving deterministic evidence, and continuing investigations when fund movement resumes.**
 
-Current published preview: https://nemesis-incident-response.jennifereze12.chatgpt.site
+**Live app:** https://nemesis-web-h7bnd6kzfq-uc.a.run.app
 
-The repository is the source of truth. The published preview may lag behind `main` until the frontend is republished or moved to the production hosting path.
+NEMESIS starts from an affected wallet or known theft transaction, identifies and verifies suspicious outflow, traces stolen assets across subsequent transactions, persists every branch of the investigation, and keeps dormant paths under monitoring so tracing can resume automatically when funds move again.
 
-## What NEMESIS does
+## Why NEMESIS
 
-A user starts with a supported chain and affected wallet address. A known theft transaction hash is optional.
+Traditional block explorers expose transactions. NEMESIS turns those transactions into a persistent incident investigation.
 
-### Known transaction path
+The system separates deterministic blockchain evidence from model interpretation. Transaction receipts, transfer logs, timestamps, amounts, branch paths, and graph state are collected and persisted first. Agent reasoning is applied only after that evidence exists.
 
-If the user already knows the theft transaction, NEMESIS immediately retrieves and verifies the transaction through real Ethereum or Base JSON RPC, then continues into the existing trace pipeline.
+## Core capabilities
 
-### Wallet-only discovery path
+- Wallet-first incident discovery when the theft transaction is unknown
+- Direct investigation from a known theft transaction
+- Deterministic Ethereum and Base transaction verification
+- Multi-hop stolen-fund tracing
+- Split branch detection and persistence
+- Swap and supported bridge continuation
+- Dormant branch monitoring and automatic trace resume
+- Persistent case graph, timeline, evidence, and branch state
+- Evidence-grounded incident classification with Google ADK and Gemini on Vertex AI
+- Risk enrichment and public abuse-report context with guarded attribution
 
-If the transaction hash is not known, NEMESIS first performs deterministic incident discovery:
+## Architecture
 
-1. Bitquery retrieves indexed historical wallet transfer activity.
-2. NEMESIS groups outgoing activity by transaction and ranks candidates using deterministic signals such as wallet outflow, value, transfer count, caller relationship, and proximity to the optional reported incident time.
-3. GoPlus can add malicious-address risk flags to leading candidate counterparties.
-4. Chainabuse can add public abuse-report evidence to the leading candidate. Results are cached and calls are deliberately limited.
-5. The selected candidate is fetched again through Ethereum/Base JSON RPC.
-6. NEMESIS refuses to proceed unless the RPC transaction itself contains deterministic value leaving the submitted wallet.
-7. Only after RPC verification does the normal evidence, tracing, Taskmaster, and Gemini workflow continue.
+```mermaid
+flowchart LR
+    U[User] --> W[Next.js Web App]
+    W --> A[FastAPI API on Cloud Run]
 
-Gemini does not choose or invent the theft transaction. The discovery decision is made from indexed deterministic records and then independently verified by RPC.
+    A --> D[Incident Discovery]
+    D --> IDX[Indexed EVM History]
+    D --> RISK[Risk / Abuse Enrichment]
 
-## Core investigation pipeline
+    A --> RPC[Ethereum + Base JSON RPC]
+    RPC --> E[Deterministic Evidence]
 
-After a transaction is known or discovered, NEMESIS:
+    E --> T[Trace Engine]
+    E --> G[Google ADK + Gemini]
 
-1. Retrieves the transaction, receipt, containing block, native value, and ERC20 transfer logs through real Ethereum or Base JSON RPC.
-2. Normalizes and persists deterministic evidence before model interpretation.
-3. Runs the NEMESIS root agent through Google ADK and Gemini 3.5 Flash on Vertex AI.
-4. Creates persisted trace branches for qualifying fund movement.
-5. Recursively follows deterministic multi-hop movement.
-6. Handles supported splits, residual branches, swaps, and bridge evidence without inventing unsupported paths.
-7. Marks quiet branches dormant and keeps them in persistent monitoring state.
-8. Uses Cloud Scheduler and Pub/Sub to recheck dormant branches and automatically resume tracing when confirmed movement appears.
-9. Persists the graph, timeline, branch state, and provenance to Firestore for the frontend to display.
+    T --> F[(Firestore)]
+    G --> F
 
-NEMESIS is not a chatbot wrapped around an RPC call. Gemini is deliberately kept downstream of deterministic evidence and cannot replace blockchain facts.
+    F --> P[Pub/Sub]
+    S[Cloud Scheduler] --> M[Dormant Branch Recheck]
+    M --> RPC
+    M --> P
+    P --> T
+
+    T --> X[Persisted Fund Graph + Timeline]
+    X --> W
+```
+
+### Investigation flow
+
+```mermaid
+flowchart TD
+    S[Wallet or theft transaction] --> K{Transaction known?}
+    K -->|Yes| V[RPC verification]
+    K -->|No| D[Wallet history discovery]
+    D --> V
+    V --> E[Persist deterministic evidence]
+    E --> C[Classify incident]
+    E --> T[Trace stolen funds]
+    T --> B{Branch state}
+    B -->|Moving| T
+    B -->|Dormant| M[Persist + monitor]
+    B -->|Actionable| A[Prepare escalation evidence]
+    M --> N{New movement?}
+    N -->|Yes| T
+    N -->|No| M
+```
+
+## System design
+
+### Evidence first
+
+The blockchain evidence layer owns transaction facts, transfer paths, amounts, timestamps, graph structure, and branch state. Model output cannot replace or invent those facts.
+
+### Persistent investigations
+
+Each case is stored with its evidence, branches, graph nodes and edges, timeline, monitoring state, and provenance. A case can continue after the original browser session ends.
+
+### Autonomous monitoring
+
+When a traced path stops moving, NEMESIS marks that branch dormant instead of treating the investigation as finished. Scheduled rechecks examine the branch again. Confirmed movement creates a new event and tracing resumes from the persisted branch state.
+
+### Guarded interpretation
+
+Google ADK and Gemini classify and summarize verified evidence. Findings remain tied to evidence references and explicit limitations. NEMESIS does not infer a real-world identity from an address alone.
 
 ## Production stack
 
-- Frontend: React / Next-compatible app built with Vinext
-- API: FastAPI
-- Runtime: Google Cloud Run, `us-central1`
-- Persistence: Firestore
-- Agent framework: Google ADK
-- Model: Gemini 3.5 Flash through Vertex AI `global`
-- Eventing: Google Cloud Pub/Sub
-- Monitoring trigger: Google Cloud Scheduler
-- Blockchain evidence: Ethereum and Base JSON RPC
-- Incident discovery: Bitquery indexed EVM history
-- Risk enrichment: GoPlus and Chainabuse
-- Attribution: deterministic curated provider with guardrails
-
-## Real and synthetic paths
-
-### Real investigation
-
-The real form accepts `wallet_address`, `chain`, an optional `theft_transaction_hash`, and an optional approximate `incident_time`.
-
-A supplied hash uses the direct RPC path. A missing hash activates the Bitquery discovery path before RPC verification. The backend then persists evidence, invokes ADK/Gemini, creates trace state, and exposes the persisted graph and timeline to the case workspace.
-
-### Deterministic demo
-
-The demo is a controlled synthetic scenario for presenting a complete split, swap, bridge, dormant-monitoring, movement-resume, and actionable-destination story without pretending those demo facts came from a live theft.
-
-Synthetic demo state is labelled as such and is separate from the real RPC workflow.
-
-## Verified cloud baseline
-
-On 2026-08-22 the previously integrated backend passed 33 backend tests and was deployed successfully to Cloud Run.
-
-That cloud verification included:
-
-- real Ethereum investigation
-- real Base investigation
-- deterministic ERC20 decoding
-- persisted trace branches
-- persisted graph nodes and edges
-- persisted case timeline
-- deterministic split and swap detection
-- dormant monitoring registration
-- Cloud Scheduler recheck
-- authenticated Pub/Sub event callbacks
-- confirmed movement detection
-- automatic trace resume
-- graph extension after resume
-- persistent dormant state after continued tracing
-- Google ADK Runner execution
-- Gemini 3.5 Flash through Vertex AI `global`
-- validated structured findings
-
-The newer wallet-only discovery, Bitquery, GoPlus, and Chainabuse source changes are not yet represented by that cloud baseline. They must be tested with the current suite and then deployed and verified before being described as cloud verified.
-
-No universal bridge-resolution claim is made. No exchange customer identity, KYC, UID, freeze, cooperation, or guaranteed recovery is claimed.
-
-## Current integration status
-
-| Integration | Status |
+| Layer | Technology |
 | --- | --- |
-| Ethereum JSON RPC | Implemented and cloud verified |
-| Base JSON RPC | Implemented and cloud verified |
-| Cloud Run | Existing backend deployed; current source update pending redeploy |
-| Firestore | Implemented and cloud verified |
-| Google ADK | Implemented and cloud verified |
-| Gemini 3.5 Flash / Vertex AI | Implemented and cloud verified |
-| Pub/Sub | Implemented and cloud verified |
-| Cloud Scheduler | Implemented and cloud verified |
-| Multi-hop tracing | Implemented and cloud verified |
-| Fund splits | Implemented and cloud verified |
-| Swap detection | Implemented and exercised in verification |
-| Dormant monitoring / autonomous resume | Implemented and cloud verified |
-| Deterministic attribution guardrails | Implemented |
-| Supported bridge evidence | Implemented with deterministic limits |
-| Wallet-only incident discovery | Implemented in source; deployment verification pending |
-| Bitquery | Implemented in source for historical wallet discovery; credential/deployment verification pending |
-| GoPlus | Implemented in source as best-effort malicious-address enrichment; live verification pending |
-| Chainabuse | Implemented in source with cached, call-conservative screening; credential/deployment verification pending |
-| BlockSec | Planned after deployment verification |
-| TRM Beacon | Approval-dependent; planned after deployment verification |
-| BigQuery | Not used by the deployed runtime |
+| Frontend | Next.js / React |
+| API | FastAPI |
+| Cloud runtime | Google Cloud Run |
+| Persistence | Firestore |
+| Agent runtime | Google ADK |
+| Model | Gemini 3.5 Flash on Vertex AI |
+| Eventing | Google Cloud Pub/Sub |
+| Monitoring | Google Cloud Scheduler |
+| Chain evidence | Ethereum and Base JSON RPC |
+| Incident discovery | Indexed EVM history |
+| Risk context | GoPlus and Chainabuse |
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the system flow, autonomy loop, persistence model, integration boundaries, and current limitations.
+## Real investigation path
 
-## Configuration
+A user can begin with an affected wallet alone or provide a known theft transaction.
 
-Copy `.env.example` to `.env` for local development. Do not commit real provider credentials.
+When the transaction is unknown, NEMESIS searches indexed wallet activity for incident candidates, scores them using deterministic signals, and then independently verifies the selected candidate through blockchain RPC before it is admitted into the investigation.
 
-Wallet-only discovery uses:
+Once verified, NEMESIS persists the evidence, classifies the likely compromise mechanism, creates trace branches, recursively follows qualifying fund movement, and exposes the resulting graph and timeline to the case workspace.
 
-```text
-BITQUERY_ACCESS_TOKEN=
-BITQUERY_ENDPOINT=https://streaming.bitquery.io/graphql
-DISCOVERY_CANDIDATE_LIMIT=100
-GOPLUS_BASE_URL=https://api.gopluslabs.io/api/v1
-GOPLUS_ACCESS_TOKEN=
-CHAINABUSE_API_KEY=
-CHAINABUSE_BASE_URL=https://api.chainabuse.com/v0
-```
+## Monitoring lifecycle
 
-`GOPLUS_ACCESS_TOKEN` is optional for the current best-effort integration. Production provider secrets should live in the deployment secret store rather than the repository.
+A trace branch can move through investigation states such as `MOVING`, `DORMANT`, `OBSCURED`, and `ACTIONABLE`.
 
-## Local backend
+Dormant does not mean complete. It means the currently visible trail has stopped moving. NEMESIS keeps that branch in persistent state and rechecks it for confirmed outgoing movement. When movement appears, tracing resumes from the exact stored branch rather than rebuilding the case from scratch.
 
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
+## Safety and evidence boundaries
 
-Production mode refuses to start unless the deterministic RPC, Firestore, and Gemini/Vertex configuration is present. Wallet-only investigations additionally require a configured Bitquery token; the known-transaction path does not.
+NEMESIS is an investigation and evidence system. It does not claim access to exchange customer records, private KYC data, fund-freezing powers, law-enforcement systems, or guaranteed asset recovery.
 
-Run the frontend with:
-
-```bash
-NEXT_PUBLIC_NEMESIS_API_URL=http://localhost:8080 npm run dev
-```
-
-## Tests
-
-```bash
-backend/.venv/bin/pytest -q backend/tests
-npm test
-```
-
-`backend/tests/test_incident_discovery.py` covers wallet-only workflow selection, RPC verification, Bitquery ranking, GoPlus normalization/caching, and Chainabuse authentication/caching.
-
-## Deployment direction
-
-The intended production request path is:
-
-```text
-Production frontend
-        |
-        v
-Google Cloud Run API
-        |
-        +--> Ethereum / Base JSON RPC
-        +--> Bitquery
-        +--> GoPlus
-        +--> Chainabuse
-        +--> Firestore
-        +--> Google ADK / Gemini
-        +--> Pub/Sub / Cloud Scheduler
-```
-
-The production frontend should call Cloud Run directly. The ChatGPT Site preview is not part of the intended production request path.
-
-The FastAPI backend ships with a non-root Cloud Run container, `cloudbuild.yaml`, and `infra/bootstrap-gcp.sh`. After the new production frontend URL exists, add that origin to `CORS_ALLOWED_ORIGINS`, add the Bitquery and Chainabuse credentials through the deployment secret configuration, redeploy the current commit, and verify a wallet-only browser investigation end to end.
-
-## Safety boundary
-
-NEMESIS traces onchain evidence and prepares structured evidence for escalation.
-
-It does **not** claim:
+It does not claim:
 
 - a thief's real-world identity from an address alone
 - exchange account holder details
 - customer UID, email, or KYC access
-- fund freezing
-- law-enforcement action
-- exchange cooperation
-- guaranteed asset recovery
+- guaranteed exchange cooperation
+- guaranteed fund recovery
 
-Every production claim should remain tied to evidence the deployed system can actually prove.
+Attribution and escalation remain bounded by the evidence available to the system.
+
+## Repository structure
+
+```text
+app/        Web application and investigation workspace
+backend/    FastAPI API, evidence pipeline, tracing, monitoring, and agents
+docs/       Architecture and implementation notes
+infra/      Google Cloud deployment/bootstrap resources
+```
+
+For a deeper technical breakdown of the evidence boundary, trace lifecycle, persistence model, monitoring loop, and integration limits, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Verification
+
+The repository includes automated backend and frontend verification through GitHub Actions. Real investigation paths have been exercised against Ethereum and Base with persisted Firestore case state, trace branches, graph updates, timeline events, dormant monitoring, and agent-generated structured findings.
+
+Synthetic demo data is kept separate from the real investigation path and is labelled as demo state in the UI.
