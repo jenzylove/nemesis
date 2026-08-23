@@ -7,9 +7,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from .agent_runtime import classifier_from_settings
+from .alchemy_discovery import AlchemyIncidentDiscovery
 from .config import get_settings
 from .discovery import (
-    BitqueryIncidentDiscovery,
     ChainabuseClient,
     DiscoveryProviderError,
     DiscoveryUnavailableError,
@@ -46,15 +46,14 @@ chainabuse = ChainabuseClient(
     base_url=settings.chainabuse_base_url,
 )
 discovery = (
-    BitqueryIncidentDiscovery(
-        access_token=settings.bitquery_access_token,
-        endpoint=settings.bitquery_endpoint,
+    AlchemyIncidentDiscovery(
+        api_key=settings.alchemy_api_key,
         timeout_seconds=settings.rpc_timeout_seconds,
-        candidate_limit=settings.discovery_candidate_limit,
+        max_pages=settings.alchemy_discovery_max_pages,
         goplus=goplus,
         chainabuse=chainabuse,
     )
-    if settings.bitquery_access_token
+    if settings.alchemy_api_key
     else None
 )
 workflow = CaseWorkflow(repository, provider, classifier, discovery=discovery)
@@ -118,7 +117,7 @@ async def lifespan(_):
 
 app = FastAPI(
     title="NEMESIS Case Runtime",
-    version="0.6.0",
+    version="0.7.0",
     lifespan=lifespan,
     docs_url=None if settings.app_env == "production" else "/docs",
     openapi_url=None if settings.app_env == "production" else "/openapi.json",
@@ -142,7 +141,8 @@ async def health():
         "agent": classifier.__class__.__name__,
         "trace_engine": "deterministic_v2",
         "trace_max_depth": settings.trace_max_depth,
-        "incident_discovery": "bitquery" if discovery else "unavailable",
+        "incident_discovery": "alchemy" if discovery else "unavailable",
+        "realtime_monitoring_provider": "bitquery" if settings.bitquery_access_token else "rpc",
         "enrichment": {
             "goplus": True,
             "chainabuse": bool(settings.chainabuse_api_key),
