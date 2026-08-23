@@ -71,7 +71,7 @@ class DiscoveryCandidate(BaseModel):
 
 class IncidentDiscovery(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    source: Literal["bitquery"]
+    source: Literal["bitquery", "alchemy"]
     selected_transaction_hash: str
     selected_score: float
     candidate_count: int = Field(ge=1)
