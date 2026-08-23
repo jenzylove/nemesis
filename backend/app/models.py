@@ -114,6 +114,8 @@ class InvestigationCase(BaseModel):
     updated_at: datetime
     wallet_address: str
     chain: ChainSelection
+    owner_user_id: str | None = None
+    owner_email: str | None = None
     theft_transaction_hash: str | None = None
     discovery: IncidentDiscovery | None = None
     evidence: DeterministicEvidence | None = None
