@@ -107,7 +107,8 @@ async def test_bitquery_realtime_detector_uses_realtime_dataset_and_block_cursor
         body = json.loads(request.content)
         assert "dataset: realtime" in body["query"]
         assert "network: eth" in body["query"]
-        assert body["variables"] == {"wallet": ADDRESS, "after": "1900"}
+        assert 'Block: {Number: {gt: "1900"}}' in body["query"]
+        assert body["variables"] == {"wallet": ADDRESS}
         return httpx.Response(
             200,
             json={
