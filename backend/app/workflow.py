@@ -17,13 +17,31 @@ class CaseWorkflow:
         if reason not in candidate.reasons and len(candidate.reasons) < 12:
             candidate.reasons.append(reason)
 
-    async def _select_verified_incident(self, chain, wallet, discovery):
-        """Choose the likely drain from provider-ranked candidates using RPC facts.
+    @staticmethod
+    def _wallet_outflow(transaction, wallet: str) -> bool:
+        return (
+            transaction.from_address == wallet
+            and int(transaction.native_value_wei) > 0
+        ) or any(
+            transfer.from_address == wallet
+            for transfer in transaction.erc20_transfers
+        )
 
-        Indexed discovery and reputation evidence build the shortlist. RPC then
-        verifies each candidate and can add deterministic drain signals before
-        final selection. The chosen transaction is the exact transaction traced.
-        """
+    async def _select_verified_incident(self, chain, wallet, discovery):
+        """Choose the likely drain from provider-ranked candidates using RPC facts."""
+        if not discovery.candidates:
+            tx_hash = discovery.selected_transaction_hash.lower()
+            transaction = await self.provider.get_normalized_transaction(chain, tx_hash)
+            if transaction.hash.lower() != tx_hash:
+                raise ValueError(
+                    "resolved transaction hash does not match deterministic RPC evidence"
+                )
+            if transaction.status != "success" or not self._wallet_outflow(transaction, wallet):
+                raise ValueError(
+                    "the discovered transaction did not contain deterministic value leaving the submitted wallet"
+                )
+            return transaction
+
         ranked = []
         for candidate in discovery.candidates:
             tx_hash = candidate.transaction_hash.lower()
@@ -49,8 +67,6 @@ class CaseWorkflow:
                 len(token_outflows) + (1 if native_outflow else 0),
             )
 
-            # Strong deterministic drain signal: another account called the
-            # transaction while token value left the submitted wallet.
             if token_outflows and transaction.from_address != wallet:
                 candidate.score += 45
                 self._append_reason(
@@ -152,8 +168,6 @@ class CaseWorkflow:
             case.updated_at = datetime.now(timezone.utc)
             await self.repository.save(case)
 
-            # Tracing is independent from compromise-mechanism classification.
-            # Once the likely incident is RPC verified, trace the actual outflows.
             if self.taskmaster:
                 await self.taskmaster.trace_initial(case.id, evidence)
 
