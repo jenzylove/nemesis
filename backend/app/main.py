@@ -142,7 +142,8 @@ async def health():
         "trace_engine": "deterministic_v2",
         "trace_max_depth": settings.trace_max_depth,
         "incident_discovery": "alchemy" if discovery else "unavailable",
-        "realtime_monitoring_provider": "bitquery" if settings.bitquery_access_token else "rpc",
+        "realtime_monitoring_provider": "rpc",
+        "bitquery_realtime_configured": bool(settings.bitquery_access_token),
         "enrichment": {
             "goplus": True,
             "chainabuse": bool(settings.chainabuse_api_key),
