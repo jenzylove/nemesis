@@ -20,6 +20,7 @@ ALCHEMY_HOSTS: dict[ChainName, str] = {
     "base": "https://base-mainnet.g.alchemy.com/v2",
 }
 TRANSFER_CATEGORIES = ["external", "internal", "erc20", "erc721", "erc1155"]
+ENRICHMENT_CANDIDATE_LIMIT = 5
 
 
 class AlchemyIncidentDiscovery:
@@ -123,6 +124,16 @@ class AlchemyIncidentDiscovery:
         except (TypeError, ValueError):
             return None
 
+    @staticmethod
+    def _sort(candidates: list[DiscoveryCandidate]) -> None:
+        candidates.sort(
+            key=lambda candidate: (
+                candidate.score,
+                candidate.timestamp or datetime.min.replace(tzinfo=timezone.utc),
+            ),
+            reverse=True,
+        )
+
     def _build_candidates(
         self,
         rows: list[dict[str, Any]],
@@ -209,14 +220,42 @@ class AlchemyIncidentDiscovery:
                 )
             )
 
-        return sorted(
-            candidates,
-            key=lambda candidate: (
-                candidate.score,
-                candidate.timestamp or datetime.min.replace(tzinfo=timezone.utc),
-            ),
-            reverse=True,
-        )
+        self._sort(candidates)
+        return candidates
+
+    async def _enrich_shortlist(
+        self, chain: ChainName, candidates: list[DiscoveryCandidate]
+    ) -> None:
+        """Enrich the serious deterministic shortlist before final selection.
+
+        Provider reputation can influence ranking, but it never substitutes for
+        the RPC verification that happens after a transaction is selected.
+        """
+        shortlist = candidates[:ENRICHMENT_CANDIDATE_LIMIT]
+
+        if self.goplus:
+            for candidate in shortlist:
+                check = await self.goplus.check(chain, candidate.counterparty)
+                if not check.get("available"):
+                    continue
+                candidate.goplus_flags = list(check.get("flags") or [])
+                if check.get("malicious"):
+                    candidate.score += 24
+                    candidate.reasons.append("GoPlus flags the outgoing counterparty")
+
+        if self.chainabuse:
+            # The client caches by address, so repeated counterparties cost one API call.
+            for candidate in shortlist:
+                check = await self.chainabuse.check(candidate.counterparty)
+                if not check.get("available"):
+                    continue
+                candidate.chainabuse_report_count = check.get("report_count")
+                report_count = int(check.get("report_count") or 0)
+                if report_count > 0:
+                    candidate.score += min(30, 10 + 2 * report_count)
+                    candidate.reasons.append("Chainabuse has reports for the outgoing counterparty")
+
+        self._sort(candidates)
 
     async def discover(
         self, chain: ChainName, wallet: str, incident_time: datetime | None = None
@@ -229,39 +268,7 @@ class AlchemyIncidentDiscovery:
                 "No deterministic outgoing transfer candidate was found for this wallet. Add an approximate incident time or a known theft transaction hash."
             )
 
-        if self.goplus:
-            for candidate in candidates[:3]:
-                check = await self.goplus.check(chain, candidate.counterparty)
-                if check.get("available"):
-                    candidate.goplus_flags = list(check.get("flags") or [])
-                    if check.get("malicious"):
-                        candidate.score += 24
-                        candidate.reasons.append("GoPlus flags the outgoing counterparty")
-
-        candidates.sort(
-            key=lambda candidate: (
-                candidate.score,
-                candidate.timestamp or datetime.min.replace(tzinfo=timezone.utc),
-            ),
-            reverse=True,
-        )
-
-        top = candidates[0]
-        if self.chainabuse:
-            check = await self.chainabuse.check(top.counterparty)
-            if check.get("available"):
-                top.chainabuse_report_count = check.get("report_count")
-                if (check.get("report_count") or 0) > 0:
-                    top.score += min(30, 10 + 2 * int(check["report_count"]))
-                    top.reasons.append("Chainabuse has reports for the outgoing counterparty")
-
-        candidates.sort(
-            key=lambda candidate: (
-                candidate.score,
-                candidate.timestamp or datetime.min.replace(tzinfo=timezone.utc),
-            ),
-            reverse=True,
-        )
+        await self._enrich_shortlist(chain, candidates)
         top = candidates[0]
         return IncidentDiscovery(
             source="alchemy",
