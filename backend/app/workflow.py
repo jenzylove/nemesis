@@ -4,6 +4,9 @@ import uuid
 from .models import CaseCreate, CaseResponse, DeterministicEvidence, InvestigationCase
 
 
+SUPPORTED_CHAINS = ("ethereum", "base")
+
+
 class CaseWorkflow:
     def __init__(self, repository, provider, classifier, taskmaster=None, discovery=None):
         self.repository = repository
@@ -117,6 +120,48 @@ class CaseWorkflow:
         discovery.selected_score = selected.score
         return transaction
 
+    async def _discover_auto_chain(self, wallet, incident_time):
+        if self.discovery is None:
+            from .discovery import DiscoveryUnavailableError
+
+            raise DiscoveryUnavailableError(
+                "Wallet-only discovery is not configured. Add a theft transaction hash or configure Alchemy."
+            )
+
+        resolved = []
+        failures = []
+        for chain in SUPPORTED_CHAINS:
+            try:
+                discovery = await self.discovery.discover(chain, wallet, incident_time)
+                transaction = await self._select_verified_incident(chain, wallet, discovery)
+                resolved.append((discovery.selected_score, chain, discovery, transaction))
+            except Exception as exc:
+                failures.append(f"{chain}: {exc}")
+
+        if not resolved:
+            detail = "; ".join(failures) if failures else "no supported chain returned a verified incident"
+            raise ValueError(
+                f"no verified incident found on supported chains ({', '.join(SUPPORTED_CHAINS)}): {detail}"
+            )
+
+        resolved.sort(key=lambda item: item[0], reverse=True)
+        _, chain, discovery, transaction = resolved[0]
+        return chain, discovery, transaction
+
+    async def _resolve_supplied_hash_chain(self, tx_hash):
+        failures = []
+        for chain in SUPPORTED_CHAINS:
+            try:
+                transaction = await self.provider.get_normalized_transaction(chain, tx_hash)
+                if transaction.hash.lower() == tx_hash and transaction.status == "success":
+                    return chain, transaction
+            except Exception as exc:
+                failures.append(f"{chain}: {exc}")
+        detail = "; ".join(failures) if failures else "transaction was not resolved"
+        raise ValueError(
+            f"transaction hash was not found on supported chains ({', '.join(SUPPORTED_CHAINS)}): {detail}"
+        )
+
     async def create_and_investigate(self, request: CaseCreate) -> CaseResponse:
         now = datetime.now(timezone.utc)
         wallet = request.wallet_address.lower()
@@ -134,31 +179,42 @@ class CaseWorkflow:
 
         try:
             if supplied_hash is None:
-                if self.discovery is None:
-                    from .discovery import DiscoveryUnavailableError
-
-                    raise DiscoveryUnavailableError(
-                        "Wallet-only discovery is not configured. Add a theft transaction hash or configure Alchemy."
+                if request.chain == "auto":
+                    resolved_chain, discovery, transaction = await self._discover_auto_chain(
+                        wallet, request.incident_time
                     )
-                case.discovery = await self.discovery.discover(
-                    request.chain, wallet, request.incident_time
-                )
-                transaction = await self._select_verified_incident(
-                    request.chain, wallet, case.discovery
-                )
+                    case.chain = resolved_chain
+                    case.discovery = discovery
+                else:
+                    if self.discovery is None:
+                        from .discovery import DiscoveryUnavailableError
+
+                        raise DiscoveryUnavailableError(
+                            "Wallet-only discovery is not configured. Add a theft transaction hash or configure Alchemy."
+                        )
+                    case.discovery = await self.discovery.discover(
+                        request.chain, wallet, request.incident_time
+                    )
+                    transaction = await self._select_verified_incident(
+                        request.chain, wallet, case.discovery
+                    )
                 tx_hash = transaction.hash.lower()
                 case.theft_transaction_hash = tx_hash
                 case.updated_at = datetime.now(timezone.utc)
                 await self.repository.save(case)
             else:
                 tx_hash = supplied_hash
-                transaction = await self.provider.get_normalized_transaction(
-                    request.chain, tx_hash
-                )
-                if transaction.hash.lower() != tx_hash:
-                    raise ValueError(
-                        "resolved transaction hash does not match deterministic RPC evidence"
+                if request.chain == "auto":
+                    resolved_chain, transaction = await self._resolve_supplied_hash_chain(tx_hash)
+                    case.chain = resolved_chain
+                else:
+                    transaction = await self.provider.get_normalized_transaction(
+                        request.chain, tx_hash
                     )
+                    if transaction.hash.lower() != tx_hash:
+                        raise ValueError(
+                            "resolved transaction hash does not match deterministic RPC evidence"
+                        )
 
             evidence = DeterministicEvidence(
                 submitted_wallet=wallet,
