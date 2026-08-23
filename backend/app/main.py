@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from .agent_runtime import classifier_from_settings
 from .alchemy_discovery import AlchemyIncidentDiscovery
+from .auth import require_user
 from .config import get_settings
 from .discovery import (
     ChainabuseClient,
@@ -107,6 +108,15 @@ async def require_internal(
     return claims
 
 
+async def owned_case(case_id: str, user: dict):
+    case = await repository.get(case_id)
+    if not case:
+        raise HTTPException(404, "case not found")
+    if case.owner_user_id != user.get("sub"):
+        raise HTTPException(404, "case not found")
+    return case
+
+
 class DormantRequest(BaseModel):
     case_id: str = Field(min_length=4, max_length=80)
     chain: ChainName
@@ -142,7 +152,7 @@ async def lifespan(_):
 
 app = FastAPI(
     title="NEMESIS Case Runtime",
-    version="0.8.0",
+    version="0.9.0",
     lifespan=lifespan,
     docs_url=None if settings.app_env == "production" else "/docs",
     openapi_url=None if settings.app_env == "production" else "/openapi.json",
@@ -152,7 +162,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -169,6 +179,7 @@ async def health():
         "incident_discovery": "alchemy" if discovery else "unavailable",
         "historical_branch_continuation": "alchemy+rpc_verify" if settings.alchemy_api_key else "rpc",
         "realtime_movement_detection": "bitquery+rpc_verify" if settings.bitquery_access_token else "rpc",
+        "authentication": "firebase" if (settings.firebase_project_id or settings.google_cloud_project) else "unconfigured",
         "enrichment": {
             "goplus": True,
             "chainabuse": bool(settings.chainabuse_api_key),
@@ -177,9 +188,13 @@ async def health():
 
 
 @app.post("/v1/cases", response_model=CaseResponse, status_code=201)
-async def create_case(body: CaseCreate):
+async def create_case(body: CaseCreate, user: dict = Depends(require_user)):
     try:
-        return await workflow.create_and_investigate(body)
+        response = await workflow.create_and_investigate(body)
+        response.case.owner_user_id = user["sub"]
+        response.case.owner_email = user.get("email")
+        await repository.save(response.case)
+        return response
     except IncidentNotFoundError as exc:
         raise HTTPException(422, str(exc)) from exc
     except DiscoveryUnavailableError as exc:
@@ -194,25 +209,29 @@ async def create_case(body: CaseCreate):
         raise HTTPException(503, str(exc)) from exc
 
 
+@app.get("/v1/me/cases")
+async def my_cases(user: dict = Depends(require_user)):
+    cases = await repository.list_by_owner(user["sub"])
+    return [case.model_dump(mode="json") for case in cases]
+
+
 @app.get("/v1/cases/{case_id}")
-async def get_case(case_id: str):
-    case = await repository.get(case_id)
-    if not case:
-        raise HTTPException(404, "case not found")
+async def get_case(case_id: str, user: dict = Depends(require_user)):
+    case = await owned_case(case_id, user)
     return case.model_dump(mode="json")
 
 
 @app.get("/v1/cases/{case_id}/timeline")
-async def get_timeline(case_id: str):
+async def get_timeline(case_id: str, user: dict = Depends(require_user)):
+    await owned_case(case_id, user)
     if taskmaster is None:
         raise HTTPException(503, "monitoring runtime unavailable")
     return [e.model_dump(mode="json") for e in await taskmaster.repo.get_timeline(case_id)]
 
 
 @app.get("/v1/cases/{case_id}/trace")
-async def get_trace(case_id: str):
-    if not await repository.get(case_id):
-        raise HTTPException(404, "case not found")
+async def get_trace(case_id: str, user: dict = Depends(require_user)):
+    await owned_case(case_id, user)
     if taskmaster is None:
         raise HTTPException(503, "tracing runtime unavailable")
     return await taskmaster.case_trace(case_id)
