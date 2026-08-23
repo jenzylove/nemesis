@@ -3,8 +3,10 @@ import "./globals.css";
 import "./brand.css";
 import "./motion.css";
 import "./case-experience.css";
+import "./auth-gate.css";
 import AutoChainEnhancer from "./auto-chain";
 import CaseExperienceEnhancer from "./case-experience";
+import AuthGate from "./auth-gate";
 
 const configuredSiteUrl=process.env.NEXT_PUBLIC_SITE_URL;
 
@@ -18,5 +20,5 @@ export const metadata:Metadata={
 };
 
 export default function RootLayout({children}:{children:React.ReactNode}){
- return <html lang="en"><body><AutoChainEnhancer/><CaseExperienceEnhancer/>{children}</body></html>
+ return <html lang="en"><body><AutoChainEnhancer/><CaseExperienceEnhancer/><AuthGate/>{children}</body></html>
 }
