@@ -2,14 +2,13 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .config import get_settings
+from .models import CaseCreate
 
 settings = get_settings()
 user_bearer = HTTPBearer(auto_error=False)
 
 
-async def require_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(user_bearer),
-) -> dict:
+def verify_user_credentials(credentials: HTTPAuthorizationCredentials | None) -> dict:
     if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(401, "sign in required")
     try:
@@ -26,3 +25,21 @@ async def require_user(
     if not claims or not claims.get("sub"):
         raise HTTPException(401, "invalid user identity token")
     return claims
+
+
+async def require_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(user_bearer),
+) -> dict:
+    return verify_user_credentials(credentials)
+
+
+async def require_case_user(
+    body: CaseCreate,
+    credentials: HTTPAuthorizationCredentials | None = Depends(user_bearer),
+) -> dict:
+    # Making the request model part of this dependency preserves FastAPI's
+    # schema validation contract: malformed case payloads return 422 before
+    # authentication is evaluated, while valid investigations still require
+    # a Firebase bearer token.
+    _ = body
+    return verify_user_credentials(credentials)
