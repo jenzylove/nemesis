@@ -8,6 +8,7 @@ from app.alchemy_discovery import AlchemyIncidentDiscovery
 
 WALLET = "0x" + "11" * 20
 COUNTERPARTY = "0x" + "22" * 20
+RISKY_COUNTERPARTY = "0x" + "44" * 20
 TX_HASH = "0x" + "ab" * 32
 TX_HASH_2 = "0x" + "cd" * 32
 
@@ -121,6 +122,47 @@ async def test_alchemy_discovery_without_incident_time_uses_full_history_and_fan
     assert result.incident_time is None
     assert result.candidates[0].outgoing_transfer_count == 3
     assert any("multiple outgoing transfers" in reason for reason in result.candidates[0].reasons)
+
+
+@pytest.mark.asyncio
+async def test_enrichment_can_rerank_lower_candidate_before_selection():
+    class GoPlusStub:
+        async def check(self, chain, address):
+            return {"available": True, "malicious": False, "flags": []}
+
+    class ChainabuseStub:
+        async def check(self, address):
+            if address == RISKY_COUNTERPARTY:
+                return {"available": True, "report_count": 6, "max_confidence": 90}
+            return {"available": True, "report_count": 0, "max_confidence": None}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "transfers": [
+                        transfer(TX_HASH, "2026-03-23T09:54:47Z", "erc20", COUNTERPARTY),
+                        transfer(TX_HASH, "2026-03-23T09:54:47Z", "external", COUNTERPARTY),
+                        transfer(TX_HASH_2, "2026-03-22T16:19:59Z", "erc20", RISKY_COUNTERPARTY),
+                    ]
+                },
+            },
+        )
+
+    discovery = AlchemyIncidentDiscovery(
+        api_key="fixture-key",
+        goplus=GoPlusStub(),
+        chainabuse=ChainabuseStub(),
+        transport=httpx.MockTransport(handler),
+    )
+    result = await discovery.discover("ethereum", WALLET)
+
+    assert result.selected_transaction_hash == TX_HASH_2
+    assert result.candidates[0].chainabuse_report_count == 6
+    assert any("Chainabuse has reports" in reason for reason in result.candidates[0].reasons)
 
 
 @pytest.mark.asyncio
