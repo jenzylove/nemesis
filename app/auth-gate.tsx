@@ -21,8 +21,15 @@ type CaseSummary={
   created_at?:string;
   updated_at?:string;
   theft_transaction_hash?:string|null;
-  finding?:{classification?:string;confidence?:number}|null;
+  finding?:{classification?:string;confidence?:number;summary?:string}|null;
 };
+
+type TraceData={
+  branches:Array<{id:string;current_address:string;asset:string;amount:string;status:string;last_transaction?:string}>;
+  timeline:Array<{id:string;type:string;message:string;created_at:string}>;
+};
+
+type ReopenedCase={case:CaseSummary;trace:TraceData};
 
 type PendingRequest={
   input:RequestInfo|URL;
@@ -59,6 +66,9 @@ function isCreateCase(input:RequestInfo|URL,init?:RequestInit){
   return isNemesisApi(input)&&value===`${API}/v1/cases`&&(init?.method||"GET").toUpperCase()==="POST";
 }
 
+const short=(value:string|undefined|null)=>value&&value.length>16?`${value.slice(0,8)}…${value.slice(-6)}`:(value||"—");
+const human=(value:string|undefined|null)=>value?value.replaceAll("_"," "):"Incident investigation";
+
 export default function AuthGate(){
   const [user,setUser]=useState<User|null>(null);
   const [ready,setReady]=useState(!configured);
@@ -72,6 +82,7 @@ export default function AuthGate(){
   const [cases,setCases]=useState<CaseSummary[]>([]);
   const [historyBusy,setHistoryBusy]=useState(false);
   const [pending,setPending]=useState<PendingRequest|null>(null);
+  const [reopened,setReopened]=useState<ReopenedCase|null>(null);
 
   const label=useMemo(()=>user?"My investigations":"Sign in",[user]);
 
@@ -112,6 +123,12 @@ export default function AuthGate(){
     return()=>{cancelled=true;};
   },[pending,user]);
 
+  useEffect(()=>{
+    if(!reopened||!auth?.currentUser)return;
+    const id=setInterval(()=>void refreshOpenCase(reopened.case.id,false),15000);
+    return()=>clearInterval(id);
+  },[reopened?.case.id]);
+
   async function google(){
     if(!auth)return setError("Authentication is not configured yet.");
     setBusy(true);setError("");
@@ -143,30 +160,29 @@ export default function AuthGate(){
     finally{setHistoryBusy(false);}
   }
 
-  async function openCase(item:CaseSummary){
+  async function refreshOpenCase(caseId:string,showBusy=true){
     if(!auth?.currentUser)return;
-    setHistoryBusy(true);setError("");
+    if(showBusy)setHistoryBusy(true);
+    setError("");
     try{
       const token=await auth.currentUser.getIdToken();
       const headers={Authorization:`Bearer ${token}`};
-      const [caseRes,traceRes,timelineRes]=await Promise.all([
-        fetch(`${API}/v1/cases/${item.id}`,{headers}),
-        fetch(`${API}/v1/cases/${item.id}/trace`,{headers}),
-        fetch(`${API}/v1/cases/${item.id}/timeline`,{headers}),
+      const [caseRes,traceRes]=await Promise.all([
+        fetch(`${API}/v1/cases/${caseId}`,{headers}),
+        fetch(`${API}/v1/cases/${caseId}/trace`,{headers}),
       ]);
-      if(!caseRes.ok||!traceRes.ok||!timelineRes.ok)throw new Error("Could not reopen this investigation.");
-      const payload={case:await caseRes.json(),trace:await traceRes.json(),timeline:await timelineRes.json()};
-      sessionStorage.setItem("nemesis:reopen-case",JSON.stringify(payload));
-      window.dispatchEvent(new CustomEvent("nemesis:reopen-case",{detail:payload}));
+      if(!caseRes.ok||!traceRes.ok)throw new Error("Could not reopen this investigation.");
+      setReopened({case:await caseRes.json(),trace:await traceRes.json()});
       setHistoryOpen(false);
-      window.scrollTo({top:0,behavior:"smooth"});
     }catch(err){setError(err instanceof Error?err.message:"Could not reopen this investigation.");}
-    finally{setHistoryBusy(false);}
+    finally{if(showBusy)setHistoryBusy(false);}
   }
 
-  async function logout(){if(auth)await signOut(auth);setCases([]);setHistoryOpen(false);}
+  async function logout(){if(auth)await signOut(auth);setCases([]);setHistoryOpen(false);setReopened(null);}
 
   if(!ready)return null;
+  const dormant=reopened?.trace.branches.filter(branch=>branch.status==="DORMANT").length||0;
+  const actionable=reopened?.trace.branches.filter(branch=>branch.status==="ACTIONABLE").length||0;
   return <>
     <div className="authDock" role="navigation" aria-label="Account">
       {user&&<button type="button" className="authMini" onClick={loadCases}>My investigations</button>}
@@ -196,15 +212,26 @@ export default function AuthGate(){
         <p className="historyIntro">Your cases stay attached to this account while monitoring continues in the backend.</p>
         {historyBusy&&<div className="historyEmpty">Loading investigations…</div>}
         {!historyBusy&&cases.length===0&&<div className="historyEmpty">No investigations yet. Start one from the NEMESIS home page.</div>}
-        <div className="historyList">{cases.map(item=><button key={item.id} type="button" onClick={()=>openCase(item)} className="historyCard">
+        <div className="historyList">{cases.map(item=><button key={item.id} type="button" onClick={()=>refreshOpenCase(item.id)} className="historyCard">
           <div><span>{item.state}</span><small>{item.chain?.toUpperCase()}</small></div>
-          <strong>{item.finding?.classification?.replaceAll("_"," ")||"Incident investigation"}</strong>
+          <strong>{human(item.finding?.classification)}</strong>
           <code>{item.wallet_address}</code>
           <footer><span>{item.id}</span><span>{item.finding?.confidence!=null?`${Math.round(item.finding.confidence*100)}% confidence`:"Open case"} →</span></footer>
         </button>)}</div>
         {error&&<div className="authError">{error}</div>}
         <button className="historySignout" onClick={logout}>Sign out</button>
       </aside>
+    </div>}
+
+    {reopened&&<div className="reopenBackdrop">
+      <section className="reopenCase" aria-label={`Investigation ${reopened.case.id}`}>
+        <header><div><span>SAVED CASE · {reopened.case.id}</span><h2>Incident investigation</h2></div><button onClick={()=>setReopened(null)}>×</button></header>
+        <div className="reopenMetrics"><div><small>CHAIN</small><strong>{reopened.case.chain.toUpperCase()}</strong></div><div><small>TRACE PATHS</small><strong>{reopened.trace.branches.length}</strong></div><div><small>MONITORED</small><strong>{dormant}</strong></div><div><small>STATUS</small><strong>{actionable?"ACTIONABLE":dormant?"MONITORING":reopened.case.state}</strong></div></div>
+        <section className="reopenFinding"><span>WHAT NEMESIS FOUND</span><h3>{human(reopened.case.finding?.classification)}</h3><p>{reopened.case.finding?.summary||"This case contains persisted deterministic evidence and remains available for review."}</p><div><code>{reopened.case.wallet_address}</code>{reopened.case.finding?.confidence!=null&&<b>{Math.round(reopened.case.finding.confidence*100)}% confidence</b>}</div></section>
+        <section className="reopenBranches"><div className="reopenHead"><span>FUND PATHS</span><small>{dormant?`${dormant} being monitored`:"Current trace state"}</small></div>{reopened.trace.branches.length?reopened.trace.branches.map((branch,index)=><article key={branch.id}><div><span>BRANCH {String(index+1).padStart(2,"0")}</span><b>{branch.status}</b></div><strong>{short(branch.current_address)}</strong><small>{short(branch.asset)} · on-chain amount {branch.amount}</small></article>):<p>No qualifying outgoing fund path is currently stored for this case.</p>}</section>
+        <section className="reopenTimeline"><div className="reopenHead"><span>LATEST ACTIVITY</span><button onClick={()=>refreshOpenCase(reopened.case.id)}>Refresh</button></div>{reopened.trace.timeline.slice(-6).reverse().map(event=><div key={event.id}><time>{new Date(event.created_at).toLocaleString()}</time><p><b>{event.message}</b><small>{human(event.type)}</small></p></div>)}</section>
+        <footer><span>{dormant?`NEMESIS is monitoring ${dormant} dormant ${dormant===1?"fund path":"fund paths"} and will continue server-side even when you leave this page.`:"This case remains saved to your account."}</span><button onClick={()=>{setReopened(null);loadCases();}}>Back to my investigations</button></footer>
+      </section>
     </div>}
   </>;
 }
