@@ -87,29 +87,30 @@ class BitqueryRealtimeMovementDetector:
     async def find_outgoing(self, chain: ChainName, address: str, after_block: int) -> list[dict]:
         if not self.access_token:
             return []
-        query = """
-query RealtimeOutgoing($wallet: String!, $after: BigInt!) {
-  EVM(dataset: realtime, network: NETWORK) {
+        cursor = max(0, int(after_block))
+        query = f"""
+query RealtimeOutgoing($wallet: String!) {{
+  EVM(dataset: realtime, network: {BITQUERY_NETWORKS[chain]}) {{
     Transfers(
-      limit: {count: 100}
-      orderBy: {ascending: Block_Number}
-      where: {
-        Transfer: {Sender: {is: $wallet}}
-        Block: {Number: {gt: $after}}
-      }
-    ) {
-      Block { Number }
-      Transaction { Hash }
-      Transfer { Sender Receiver Currency { SmartContract Native } }
-    }
-  }
-}
-""".replace("NETWORK", BITQUERY_NETWORKS[chain]).strip()
+      limit: {{count: 100}}
+      orderBy: {{ascending: Block_Number}}
+      where: {{
+        Transfer: {{Sender: {{is: $wallet}}}}
+        Block: {{Number: {{gt: \"{cursor}\"}}}}
+      }}
+    ) {{
+      Block {{ Number }}
+      Transaction {{ Hash }}
+      Transfer {{ Sender Receiver Currency {{ SmartContract Native }} }}
+    }}
+  }}
+}}
+""".strip()
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds, transport=self.transport) as client:
                 response = await client.post(
                     self.endpoint,
-                    json={"query": query, "variables": {"wallet": address.lower(), "after": str(after_block)}},
+                    json={"query": query, "variables": {"wallet": address.lower()}},
                     headers={"authorization": f"Bearer {self.access_token}", "content-type": "application/json"},
                 )
                 response.raise_for_status()
@@ -130,7 +131,7 @@ query RealtimeOutgoing($wallet: String!, $after: BigInt!) {
                 block_number = int(block.get("Number"))
             except (TypeError, ValueError):
                 continue
-            if len(tx_hash) == 66 and block_number > after_block:
+            if len(tx_hash) == 66 and block_number > cursor:
                 grouped[tx_hash] = min(block_number, grouped.get(tx_hash, block_number))
         return [
             {"transaction_hash": tx_hash, "block_number": block, "kind": "indexed", "direction": "out", "detector": "bitquery_realtime"}
@@ -188,7 +189,6 @@ class HybridMovementProvider:
                 verified = await self._verify(chain, address, historical[:10])
                 if verified:
                     return verified[0]["block_number"], [verified[0]]
-                # No historical movement exists after the cursor: catch the branch up to head.
                 return latest, []
             except MovementDetectionError:
                 pass
