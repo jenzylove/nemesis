@@ -1,0 +1,67 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - Dockerfile.frontend
+      - -t
+      - us-central1-docker.pkg.dev/$PROJECT_ID/nemesis/web:$BUILD_ID
+      - --build-arg
+      - NEXT_PUBLIC_NEMESIS_API_URL=${_API_URL}
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - us-central1-docker.pkg.dev/$PROJECT_ID/nemesis/web:$BUILD_ID
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - nemesis-web
+      - --image
+      - us-central1-docker.pkg.dev/$PROJECT_ID/nemesis/web:$BUILD_ID
+      - --region
+      - ${_REGION}
+      - --platform
+      - managed
+      - --allow-unauthenticated
+      - --min-instances
+      - "0"
+      - --max-instances
+      - "3"
+      - --memory
+      - 512Mi
+      - --cpu
+      - "1"
+      - --timeout
+      - "300"
+      - --concurrency
+      - "40"
+      - --set-env-vars
+      - NEXT_PUBLIC_NEMESIS_API_URL=${_API_URL}
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        FRONTEND_URL="$(gcloud run services describe nemesis-web --region '${_REGION}' --format='value(status.url)')"
+        test -n "$${FRONTEND_URL}"
+        gcloud run services update nemesis-api-staging \
+          --region '${_REGION}' \
+          --update-env-vars "^:^CORS_ALLOWED_ORIGINS=${_LEGACY_ORIGIN},$${FRONTEND_URL}"
+        echo "PUBLIC_FRONTEND_URL=$${FRONTEND_URL}"
+
+substitutions:
+  _REGION: us-central1
+  _API_URL: https://nemesis-api-staging-h7bnd6kzfq-uc.a.run.app
+  _LEGACY_ORIGIN: https://nemesis-incident-response.jennifereze12.chatgpt.site
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - us-central1-docker.pkg.dev/$PROJECT_ID/nemesis/web:$BUILD_ID
