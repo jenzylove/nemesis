@@ -8,6 +8,14 @@ steps:
       - us-central1-docker.pkg.dev/$PROJECT_ID/nemesis/web:$BUILD_ID
       - --build-arg
       - NEXT_PUBLIC_NEMESIS_API_URL=${_API_URL}
+      - --build-arg
+      - NEXT_PUBLIC_FIREBASE_API_KEY=${_FIREBASE_API_KEY}
+      - --build-arg
+      - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${_FIREBASE_AUTH_DOMAIN}
+      - --build-arg
+      - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${_FIREBASE_PROJECT_ID}
+      - --build-arg
+      - NEXT_PUBLIC_FIREBASE_APP_ID=${_FIREBASE_APP_ID}
       - .
 
   - name: gcr.io/cloud-builders/docker
@@ -52,13 +60,17 @@ steps:
         test -n "$${FRONTEND_URL}"
         gcloud run services update nemesis-api-staging \
           --region '${_REGION}' \
-          --update-env-vars "^:^CORS_ALLOWED_ORIGINS=${_LEGACY_ORIGIN},$${FRONTEND_URL}"
+          --update-env-vars "^@^CORS_ALLOWED_ORIGINS=${_LEGACY_ORIGIN},$${FRONTEND_URL}"
         echo "PUBLIC_FRONTEND_URL=$${FRONTEND_URL}"
 
 substitutions:
   _REGION: us-central1
   _API_URL: https://nemesis-api-staging-h7bnd6kzfq-uc.a.run.app
   _LEGACY_ORIGIN: https://nemesis-incident-response.jennifereze12.chatgpt.site
+  _FIREBASE_API_KEY: ""
+  _FIREBASE_AUTH_DOMAIN: ""
+  _FIREBASE_PROJECT_ID: ""
+  _FIREBASE_APP_ID: ""
 
 options:
   logging: CLOUD_LOGGING_ONLY
