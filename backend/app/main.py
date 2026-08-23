@@ -17,6 +17,11 @@ from .discovery import (
     IncidentNotFoundError,
 )
 from .models import CaseCreate, CaseResponse, ChainName
+from .movement import (
+    AlchemyHistoricalMovementDetector,
+    BitqueryRealtimeMovementDetector,
+    HybridMovementProvider,
+)
 from .providers import JsonRpcProvider, RpcProviderError
 from .repository import repository_from_settings
 from .taskmaster import (
@@ -31,9 +36,29 @@ from .workflow import CaseWorkflow
 settings = get_settings()
 logging.basicConfig(level=settings.log_level)
 repository = repository_from_settings(settings)
-provider = JsonRpcProvider(
+rpc_provider = JsonRpcProvider(
     {"ethereum": settings.ethereum_rpc_url, "base": settings.base_rpc_url},
     timeout_seconds=settings.rpc_timeout_seconds,
+)
+provider = HybridMovementProvider(
+    rpc_provider,
+    historical=(
+        AlchemyHistoricalMovementDetector(
+            settings.alchemy_api_key,
+            timeout_seconds=settings.rpc_timeout_seconds,
+        )
+        if settings.alchemy_api_key
+        else None
+    ),
+    realtime=(
+        BitqueryRealtimeMovementDetector(
+            settings.bitquery_access_token,
+            endpoint=settings.bitquery_endpoint,
+            timeout_seconds=settings.rpc_timeout_seconds,
+        )
+        if settings.bitquery_access_token
+        else None
+    ),
 )
 classifier = classifier_from_settings(settings)
 
@@ -117,7 +142,7 @@ async def lifespan(_):
 
 app = FastAPI(
     title="NEMESIS Case Runtime",
-    version="0.7.0",
+    version="0.8.0",
     lifespan=lifespan,
     docs_url=None if settings.app_env == "production" else "/docs",
     openapi_url=None if settings.app_env == "production" else "/openapi.json",
@@ -142,8 +167,8 @@ async def health():
         "trace_engine": "deterministic_v2",
         "trace_max_depth": settings.trace_max_depth,
         "incident_discovery": "alchemy" if discovery else "unavailable",
-        "realtime_monitoring_provider": "rpc",
-        "bitquery_realtime_configured": bool(settings.bitquery_access_token),
+        "historical_branch_continuation": "alchemy+rpc_verify" if settings.alchemy_api_key else "rpc",
+        "realtime_movement_detection": "bitquery+rpc_verify" if settings.bitquery_access_token else "rpc",
         "enrichment": {
             "goplus": True,
             "chainabuse": bool(settings.chainabuse_api_key),
