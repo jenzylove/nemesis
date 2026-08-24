@@ -74,6 +74,16 @@ class DiscoveryCandidate(BaseModel):
     outgoing_transfer_count: int = Field(default=1, ge=1)
     amount_usd: float | None = Field(default=None, ge=0)
     score: float
+    selection_confidence: float = Field(default=0, ge=0, le=1)
+    asset_count: int = Field(default=0, ge=0)
+    destination_count: int = Field(default=0, ge=0)
+    native_outflow_wei: str = "0"
+    token_outflow_count: int = Field(default=0, ge=0)
+    nft_outflow_count: int = Field(default=0, ge=0)
+    caller_relationship: Literal["wallet", "third_party"] | None = None
+    method_id: str | None = None
+    outflow_summary: list[str] = Field(default_factory=list, max_length=12)
+    destination_summary: list[str] = Field(default_factory=list, max_length=12)
     reasons: list[str] = Field(default_factory=list, max_length=12)
     goplus_flags: list[str] = Field(default_factory=list, max_length=24)
     chainabuse_report_count: int | None = Field(default=None, ge=0)
@@ -82,11 +92,14 @@ class DiscoveryCandidate(BaseModel):
 class IncidentDiscovery(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source: Literal["bitquery", "alchemy"]
-    selected_transaction_hash: str
-    selected_score: float
+    status: Literal["SELECTED", "AMBIGUOUS_INCIDENT"] = "SELECTED"
+    selected_transaction_hash: str | None = None
+    selected_score: float | None = None
+    incident_selection_confidence: float = Field(default=0, ge=0, le=1)
+    ambiguity_reason: str | None = None
     candidate_count: int = Field(ge=1)
     incident_time: datetime | None = None
-    candidates: list[DiscoveryCandidate] = Field(default_factory=list, max_length=5)
+    candidates: list[DiscoveryCandidate] = Field(default_factory=list, max_length=20)
 
 
 class AgentFinding(BaseModel):
@@ -103,6 +116,7 @@ class AgentFinding(BaseModel):
     ]
     summary: str = Field(max_length=1200)
     confidence: float = Field(ge=0, le=1)
+    compromise_mechanism_confidence: float | None = Field(default=None, ge=0, le=1)
     evidence_references: list[str] = Field(default_factory=list, max_length=12)
     limitations: list[str] = Field(default_factory=list, max_length=12)
 
@@ -118,7 +132,7 @@ class AgentFinding(BaseModel):
 
 class InvestigationCase(BaseModel):
     id: str
-    state: Literal["INVESTIGATING", "MONITORING", "ACTIONABLE", "EVIDENCE_READY", "LIMITED", "FAILED"]
+    state: Literal["INVESTIGATING", "AMBIGUOUS_INCIDENT", "MONITORING", "ACTIONABLE", "EVIDENCE_READY", "LIMITED", "FAILED"]
     created_at: datetime
     updated_at: datetime
     wallet_address: str
