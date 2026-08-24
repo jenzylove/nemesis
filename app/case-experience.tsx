@@ -3,6 +3,7 @@
 import {useEffect} from "react";
 
 function text(el: Element | null){return el?.textContent?.trim()||""}
+function setText(node: Node | null | undefined,value:string){if(node&&node.textContent!==value)node.textContent=value}
 
 export default function CaseExperienceEnhancer(){
  useEffect(()=>{
@@ -38,29 +39,29 @@ export default function CaseExperienceEnhancer(){
 
    const status=page.querySelector<HTMLElement>(".caseMain header .status");
    if(status){
-    if(actionableCount>0)status.lastChild && (status.lastChild.textContent="ACTIONABLE");
-    else if(dormantCount>0)status.lastChild && (status.lastChild.textContent="MONITORING");
-    else if(movingCount>0)status.lastChild && (status.lastChild.textContent="TRACING");
-    else if(text(status).toUpperCase().includes("COMPLETE"))status.lastChild && (status.lastChild.textContent="EVIDENCE READY");
+    if(actionableCount>0)setText(status.lastChild,"ACTIONABLE");
+    else if(dormantCount>0)setText(status.lastChild,"MONITORING");
+    else if(movingCount>0)setText(status.lastChild,"TRACING");
+    else if(text(status).toUpperCase().includes("COMPLETE"))setText(status.lastChild,"EVIDENCE READY");
    }
 
    const monitorBox=page.querySelector<HTMLElement>(".monitorBox");
    if(monitorBox){
     const title=monitorBox.querySelector<HTMLElement>("b");
     const detail=monitorBox.querySelector<HTMLElement>("small");
-    if(title)title.textContent=dormantCount>0?"MONITORING FUNDS":"MONITOR ACTIVE";
-    if(detail)detail.textContent=dormantCount>0?`${dormantCount} dormant ${dormantCount===1?"branch":"branches"}`:"Watching case activity";
+    setText(title,dormantCount>0?"MONITORING FUNDS":"MONITOR ACTIVE");
+    setText(detail,dormantCount>0?`${dormantCount} dormant ${dormantCount===1?"branch":"branches"}`:"Watching case activity");
    }
 
    const activityHead=Array.from(page.querySelectorAll<HTMLElement>(".panelHead span")).find(el=>text(el)==="TASKMASTER ACTIVITY");
-   if(activityHead)activityHead.textContent="INVESTIGATION ACTIVITY";
+   setText(activityHead,"INVESTIGATION ACTIVITY");
 
    const now=page.querySelector<HTMLElement>(".realActivity .now");
    if(now){
     const subtitle=now.querySelector<HTMLElement>("span");
     if(subtitle){
-     if(dormantCount>0)subtitle.textContent=`${dormantCount} fund ${dormantCount===1?"path is":"paths are"} stationary. NEMESIS will recheck ${dormantCount===1?"this destination":"these destinations"} and resume tracing when verified movement appears.`;
-     else subtitle.textContent="Live case events from the persisted investigation workflow.";
+     if(dormantCount>0)setText(subtitle,`${dormantCount} fund ${dormantCount===1?"path is":"paths are"} stationary. NEMESIS will recheck ${dormantCount===1?"this destination":"these destinations"} and resume tracing when verified movement appears.`);
+     else setText(subtitle,"Live case events from the persisted investigation workflow.");
     }
    }
 
@@ -96,9 +97,13 @@ export default function CaseExperienceEnhancer(){
   };
 
   enhance();
-  const observer=new MutationObserver(enhance);
-  observer.observe(document.body,{childList:true,subtree:true,characterData:true});
-  return()=>observer.disconnect();
+  let frame=0;
+  const observer=new MutationObserver(()=>{
+   if(frame)return;
+   frame=requestAnimationFrame(()=>{frame=0;enhance()});
+  });
+  observer.observe(document.body,{childList:true,subtree:true});
+  return()=>{observer.disconnect();if(frame)cancelAnimationFrame(frame)};
  },[]);
  return null;
 }

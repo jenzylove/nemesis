@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import {
   createUserWithEmailAndPassword,
   getAuth,
@@ -83,6 +83,7 @@ export default function AuthGate(){
   const [historyBusy,setHistoryBusy]=useState(false);
   const [pending,setPending]=useState<PendingRequest|null>(null);
   const [reopened,setReopened]=useState<ReopenedCase|null>(null);
+  const refreshInFlight=useRef(false);
 
   const label=useMemo(()=>user?"My investigations":"Sign in",[user]);
 
@@ -162,6 +163,8 @@ export default function AuthGate(){
 
   async function refreshOpenCase(caseId:string,showBusy=true){
     if(!auth?.currentUser)return;
+    if(refreshInFlight.current)return;
+    refreshInFlight.current=true;
     if(showBusy)setHistoryBusy(true);
     setError("");
     try{
@@ -175,7 +178,7 @@ export default function AuthGate(){
       setReopened({case:await caseRes.json(),trace:await traceRes.json()});
       setHistoryOpen(false);
     }catch(err){setError(err instanceof Error?err.message:"Could not reopen this investigation.");}
-    finally{if(showBusy)setHistoryBusy(false);}
+    finally{refreshInFlight.current=false;if(showBusy)setHistoryBusy(false);}
   }
 
   async function logout(){if(auth)await signOut(auth);setCases([]);setHistoryOpen(false);setReopened(null);}
