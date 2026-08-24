@@ -5,6 +5,7 @@ COPY package.json .npmrc ./
 RUN npm install --no-audit --no-fund
 
 COPY . .
+RUN chmod +x scripts/build-verified.sh scripts/sites-env.sh
 ARG NEXT_PUBLIC_NEMESIS_API_URL
 ARG NEXT_PUBLIC_SITE_URL
 ARG NEXT_PUBLIC_FIREBASE_API_KEY
