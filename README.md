@@ -106,7 +106,7 @@ Google ADK and Gemini classify and summarize verified evidence. Findings remain 
 | Eventing | Google Cloud Pub/Sub |
 | Monitoring | Google Cloud Scheduler |
 | Chain evidence | Ethereum and Base JSON RPC |
-| Incident discovery | Indexed EVM history |
+| Incident discovery | Alchemy historical transfers |
 | Risk context | GoPlus and Chainabuse |
 
 ## Real investigation path
@@ -153,3 +153,18 @@ For a deeper technical breakdown of the evidence boundary, trace lifecycle, pers
 The repository includes automated backend and frontend verification through GitHub Actions. Real investigation paths have been exercised against Ethereum and Base with persisted Firestore case state, trace branches, graph updates, timeline events, dormant monitoring, and agent-generated structured findings.
 
 Synthetic demo data is kept separate from the real investigation path and is labelled as demo state in the UI.
+
+
+## Local verification
+
+Prerequisites: Node.js 22.13+, Python 3.12, and provider credentials copied into an ignored local environment file from `.env.example`.
+
+```bash
+npm install --no-audit --no-fund
+npm test
+cd backend
+python -m pip install -r requirements.txt
+python -m pytest -q tests
+```
+
+The landing page is public. Firebase authentication is required only when an investigation is submitted or a persisted case is opened. Configure the four `NEXT_PUBLIC_FIREBASE_*` values for sign-in, and configure Alchemy for wallet-only discovery. Alchemy supplies historical candidates, Bitquery supplies realtime movement signals when configured, and Ethereum/Base JSON RPC independently verifies admitted evidence.

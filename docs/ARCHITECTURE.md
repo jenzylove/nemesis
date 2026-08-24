@@ -13,7 +13,7 @@ Production frontend
 FastAPI on Cloud Run
         |
         +--> Wallet-only incident discovery
-        |      Bitquery historical EVM transfer index
+        |      Alchemy historical wallet transfer index
         |         |
         |         +--> GoPlus risk enrichment (best effort)
         |         +--> Chainabuse public report screening (cached / call-conservative)
@@ -43,7 +43,7 @@ FastAPI on Cloud Run
 
 The existing backend deployment region is `us-central1`.
 
-The Bitquery, GoPlus, Chainabuse, wallet-only intake, and discovery code is implemented in the current source tree. It is pending deployment with the real provider credentials and end-to-end cloud verification. The previously verified Cloud Run revision predates this discovery layer.
+Alchemy historical discovery, Bitquery realtime signals, GoPlus, Chainabuse, wallet-only intake, and RPC verification are implemented in the current source. Deployment status must be verified against the Git SHA returned by the health endpoint.
 
 ## Investigation entry paths
 
@@ -56,14 +56,14 @@ When the user supplies a confirmed theft transaction hash, NEMESIS preserves the
 3. Deterministic evidence is normalized and persisted.
 4. Taskmaster tracing and Google ADK/Gemini continue normally.
 
-This path does not depend on Bitquery, GoPlus, or Chainabuse.
+This path does not depend on Alchemy, Bitquery, GoPlus, or Chainabuse.
 
 ### Wallet-only incident discovery
 
 When the user does not know the theft transaction:
 
 1. The user supplies the affected wallet and chain. Approximate incident time is optional.
-2. Bitquery retrieves recent historical transfers involving that wallet from its indexed EVM history.
+2. Alchemy retrieves historical transfers involving that wallet. Candidate transactions remain untrusted until verified by JSON RPC.
 3. NEMESIS keeps only transactions containing deterministic outgoing transfer rows from the submitted wallet.
 4. Candidate transactions are grouped and scored using deterministic signals:
    - wallet is the transfer sender
@@ -99,7 +99,7 @@ Once a transaction has been supplied or discovered and RPC verified:
 
 ## Discovery data boundary
 
-Bitquery is used as an indexed discovery source, not as the final source of truth for the theft transaction.
+Alchemy is used for historical incident discovery and catch-up. Bitquery is used only for realtime movement signals when configured. Neither is the final source of truth.
 
 The persisted case can record:
 
@@ -111,7 +111,7 @@ The persisted case can record:
 - GoPlus risk flags when available
 - Chainabuse report count when available
 
-The final admitted transaction evidence still comes from Ethereum/Base JSON RPC. If Bitquery returns a candidate that RPC cannot verify, or RPC evidence does not show value leaving the submitted wallet, the workflow fails instead of fabricating an incident.
+The final admitted transaction evidence still comes from Ethereum/Base JSON RPC. If Alchemy returns a candidate that RPC cannot verify, or RPC evidence does not show value leaving the submitted wallet, the workflow fails instead of fabricating an incident.
 
 ## Enrichment failure model
 
@@ -119,10 +119,10 @@ GoPlus and Chainabuse are enrichment signals rather than prerequisites for the d
 
 - GoPlus requests are best effort and cached per chain/address during a running instance.
 - Chainabuse requests are best effort, cached by address, and restricted to the leading candidate to avoid wasting a tightly limited API allowance.
-- If an enrichment provider is unavailable, NEMESIS may continue using deterministic Bitquery candidate evidence and independent RPC verification.
+- If an enrichment provider is unavailable, NEMESIS may continue using Alchemy candidate evidence and independent RPC verification.
 - No provider flag is treated as a real-world identity claim.
 
-Wallet-only discovery itself requires a configured Bitquery token. If Bitquery is unavailable, the API tells the user to provide a known theft transaction hash instead.
+Wallet-only discovery requires a configured Alchemy key. If Alchemy is unavailable, the API tells the user to provide a known theft transaction hash instead.
 
 ## Persistence and idempotency
 
@@ -139,7 +139,7 @@ Primary collections used by the current runtime include:
 
 The discovery object is stored inside the case document before the selected transaction is processed further.
 
-Event document creation remains the idempotency boundary for asynchronous Taskmaster events, preventing duplicate Pub/Sub deliveries from extending the same branch twice.
+An event claim prevents concurrent duplicate handling. The marker becomes permanently complete only after successful processing; failures release the claim so Pub/Sub can retry without losing the movement event.
 
 ## Agent boundary
 
@@ -155,8 +155,8 @@ The application never claims access to exchange customer UID, email, KYC records
 | --- | --- | --- |
 | Ethereum JSON RPC | Implemented and cloud verified | Final transaction evidence and tracing |
 | Base JSON RPC | Implemented and cloud verified | Final transaction evidence and tracing |
-| FastAPI | Implemented; current source update pending redeploy | Public application API |
-| Cloud Run | Existing backend deployed; current discovery update pending redeploy | Backend runtime |
+| FastAPI | Implemented | Owner-protected application API |
+| Cloud Run | Deployment verified by health Git SHA | Backend runtime |
 | Firestore | Implemented and cloud verified | Cases, branches, graph, timeline, monitoring state |
 | Google ADK | Implemented and cloud verified | Agent runtime |
 | Gemini 3.5 Flash / Vertex AI | Implemented and cloud verified | Evidence-grounded classification and findings |
@@ -168,12 +168,11 @@ The application never claims access to exchange customer UID, email, KYC records
 | Dormant monitoring and autonomous resume | Implemented and cloud verified | Taskmaster autonomy |
 | Curated deterministic attribution layer | Implemented | Guarded service/entity attribution |
 | Supported bridge evidence | Implemented with deterministic guardrails | Bridge detection and continuation when resolvable |
-| Wallet-only incident discovery | Implemented in current source; deployment verification pending | Start from wallet when theft hash is unknown |
-| Bitquery | Implemented in current source; credential/deployment verification pending | Indexed historical wallet activity and deterministic candidate generation |
+| Wallet-only incident discovery | Implemented | Start from wallet when theft hash is unknown |
+| Alchemy | Implemented | Historical wallet discovery and catch-up candidates; every movement is RPC-verified |
+| Bitquery | Implemented when configured | Realtime outgoing-movement signals; every movement is RPC-verified |
 | GoPlus | Implemented in current source; live verification pending | Best-effort malicious-address risk enrichment |
 | Chainabuse read screening | Implemented in current source; credential/deployment verification pending | Cached public abuse-report enrichment for the leading candidate |
-| BlockSec | Planned after current deployment verification | Security/replay enrichment |
-| TRM Beacon | Approval-dependent; planned after current deployment verification | Escalation path only if approved |
 | BigQuery | Not part of the runtime | No production dependency today |
 
 ## Verified cloud baseline
@@ -190,8 +189,8 @@ NEMESIS should not claim universal cross-chain destination resolution. A bridge 
 
 The current curated attribution source is intentionally limited. Production-grade exchange/service attribution would require an additional vetted dataset or provider.
 
-Bitquery candidate ranking identifies the strongest deterministic incident candidate available in the retrieved indexed history; it is not a guarantee that every historical compromise can always be inferred from wallet activity alone. Approximate incident time materially improves candidate ranking when the user knows it.
+Alchemy candidate ranking identifies the strongest deterministic incident candidate available in the retrieved indexed history; it is not a guarantee that every historical compromise can always be inferred from wallet activity alone. Approximate incident time materially improves candidate ranking when the user knows it.
 
 GoPlus and Chainabuse are risk-enrichment sources, not identity or guilt oracles.
 
-BlockSec and TRM Beacon are not wired into the runtime yet and must not be represented as completed integrations.
+No additional tracing, attribution, or recovery provider is implied by this architecture.
