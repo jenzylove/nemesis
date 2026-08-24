@@ -265,10 +265,12 @@ def asset_totals(case, trace: dict) -> list[dict]:
 
 @app.get("/v1/cases/{case_id}/trace")
 async def get_trace(case_id: str, user: dict = Depends(require_user)):
-    await owned_case(case_id, user)
+    case = await owned_case(case_id, user)
     if taskmaster is None:
         raise HTTPException(503, "tracing runtime unavailable")
-    return await taskmaster.case_trace(case_id)
+    trace = await taskmaster.case_trace(case_id)
+    trace["asset_totals"] = asset_totals(case, trace)
+    return trace
 
 
 
@@ -292,6 +294,7 @@ async def get_evidence_package(case_id: str, user: dict = Depends(require_user))
             "discovery": case.discovery.model_dump(mode="json") if case.discovery else None,
             "normalized_evidence": case.evidence.model_dump(mode="json") if case.evidence else None,
             "trace_branches": trace["branches"], "graph": trace["graph"],
+            "asset_totals": asset_totals(case, trace),
             "timeline": trace["timeline"],
             "monitoring_state": [
                 {"branch_id": b["id"], "status": b["status"],

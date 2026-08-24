@@ -157,5 +157,8 @@ async def test_owner_evidence_package_separates_facts_and_assessment(monkeypatch
     assert package["case_metadata"]["id"] == response.case.id
     assert package["deterministic_facts"]["submitted_wallet"] == WALLET
     assert package["deterministic_facts"]["normalized_evidence"]["transaction"]["hash"] == TX_HASH
+    assert package["deterministic_facts"]["asset_totals"] == [
+        {"asset": "native", "stolen": 1, "located": 0, "unresolved": 0, "unit": "raw"}
+    ]
     assert package["nemesis_assessment"]["classification"] == "unknown"
     assert package["generated_at"]
