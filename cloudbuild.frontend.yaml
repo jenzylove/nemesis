@@ -60,13 +60,12 @@ steps:
         test -n "$${FRONTEND_URL}"
         gcloud run services update nemesis-api-staging \
           --region '${_REGION}' \
-          --update-env-vars "^@^CORS_ALLOWED_ORIGINS=${_LEGACY_ORIGIN},$${FRONTEND_URL}"
+          --update-env-vars "^@^CORS_ALLOWED_ORIGINS=$${FRONTEND_URL}"
         echo "PUBLIC_FRONTEND_URL=$${FRONTEND_URL}"
 
 substitutions:
   _REGION: us-central1
   _API_URL: https://nemesis-api-staging-h7bnd6kzfq-uc.a.run.app
-  _LEGACY_ORIGIN: https://nemesis-incident-response.jennifereze12.chatgpt.site
   _FIREBASE_API_KEY: ""
   _FIREBASE_AUTH_DOMAIN: ""
   _FIREBASE_PROJECT_ID: ""

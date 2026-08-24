@@ -37,7 +37,7 @@ steps:
 substitutions:
   _REGION: us-central1
   _GEMINI_MODEL: gemini-3.5-flash
-  _CORS_ALLOWED_ORIGINS: https://nemesis-incident-response.jennifereze12.chatgpt.site
+  _CORS_ALLOWED_ORIGINS: https://nemesis-web-h7bnd6kzfq-uc.a.run.app
   _SERVICE_URL: https://nemesis-api-staging-h7bnd6kzfq-uc.a.run.app
 options:
   logging: CLOUD_LOGGING_ONLY
