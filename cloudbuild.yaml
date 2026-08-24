@@ -7,6 +7,17 @@ steps:
     entrypoint: gcloud
     args:
       - run
+      - services
+      - update
+      - nemesis-api-staging
+      - --region
+      - ${_REGION}
+      - --remove-env-vars
+      - FIRESTORE_DATABASE
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
       - deploy
       - nemesis-api-staging
       - --image
@@ -20,8 +31,6 @@ steps:
       - nemesis-runtime@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars
       - GIT_SHA=$COMMIT_SHA,APP_ENV=production,GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=${_GEMINI_MODEL},ADK_APP_NAME=nemesis,FIRESTORE_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases,CORS_ALLOWED_ORIGINS=${_CORS_ALLOWED_ORIGINS},RPC_TIMEOUT_SECONDS=20,PUBSUB_TOPIC=nemesis-case-events,CLOUD_RUN_SERVICE_URL=${_SERVICE_URL},INTERNAL_SERVICE_ACCOUNT=nemesis-runtime@$PROJECT_ID.iam.gserviceaccount.com,MONITORING_MAX_BLOCKS=20,ALCHEMY_DISCOVERY_MAX_PAGES=20,BITQUERY_ENDPOINT=https://streaming.bitquery.io/graphql,DISCOVERY_CANDIDATE_LIMIT=100,GOPLUS_BASE_URL=https://api.gopluslabs.io/api/v1,CHAINABUSE_BASE_URL=https://api.chainabuse.com/v0
-      - --remove-env-vars
-      - FIRESTORE_DATABASE
       - --set-secrets
       - ETHEREUM_RPC_URL=nemesis-staging-ethereum-rpc:latest,BASE_RPC_URL=nemesis-staging-base-rpc:latest,ALCHEMY_API_KEY=nemesis-staging-alchemy-api-key:latest,BITQUERY_ACCESS_TOKEN=nemesis-staging-bitquery-token:latest,CHAINABUSE_API_KEY=nemesis-staging-chainabuse-api-key:latest
       - --min-instances
