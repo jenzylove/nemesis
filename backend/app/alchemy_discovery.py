@@ -21,6 +21,7 @@ ALCHEMY_HOSTS: dict[ChainName, str] = {
 }
 TRANSFER_CATEGORIES = ["external", "internal", "erc20", "erc721", "erc1155"]
 ENRICHMENT_CANDIDATE_LIMIT = 5
+RPC_SHORTLIST_LIMIT = 12
 
 
 class AlchemyIncidentDiscovery:
@@ -276,5 +277,5 @@ class AlchemyIncidentDiscovery:
             selected_score=top.score,
             candidate_count=len(candidates),
             incident_time=_as_utc(incident_time),
-            candidates=candidates[:5],
+            candidates=candidates[:RPC_SHORTLIST_LIMIT],
         )

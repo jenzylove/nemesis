@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import uuid
 
+from .incident_selection import rank_verified_candidates, wallet_outflow
 from .models import CaseCreate, CaseResponse, DeterministicEvidence, InvestigationCase
 
 
@@ -15,114 +16,11 @@ class CaseWorkflow:
         self.taskmaster = taskmaster
         self.discovery = discovery
 
-    @staticmethod
-    def _append_reason(candidate, reason: str) -> None:
-        if reason not in candidate.reasons and len(candidate.reasons) < 12:
-            candidate.reasons.append(reason)
-
-    @staticmethod
-    def _wallet_outflow(transaction, wallet: str) -> bool:
-        return (
-            transaction.from_address == wallet
-            and int(transaction.native_value_wei) > 0
-        ) or any(
-            transfer.from_address == wallet
-            for transfer in transaction.erc20_transfers
-        ) or any(
-            transfer.from_address == wallet
-            for transfer in transaction.nft_transfers
-        )
-
     async def _select_verified_incident(self, chain, wallet, discovery):
-        """Choose the likely drain from provider-ranked candidates using RPC facts."""
-        if not discovery.candidates:
-            tx_hash = discovery.selected_transaction_hash.lower()
-            transaction = await self.provider.get_normalized_transaction(chain, tx_hash)
-            if transaction.hash.lower() != tx_hash:
-                raise ValueError(
-                    "resolved transaction hash does not match deterministic RPC evidence"
-                )
-            if transaction.status != "success" or not self._wallet_outflow(transaction, wallet):
-                raise ValueError(
-                    "the discovered transaction did not contain deterministic value leaving the submitted wallet"
-                )
-            return transaction
-
-        ranked = []
-        for candidate in discovery.candidates:
-            tx_hash = candidate.transaction_hash.lower()
-            transaction = await self.provider.get_normalized_transaction(chain, tx_hash)
-            if transaction.hash.lower() != tx_hash or transaction.status != "success":
-                continue
-
-            token_outflows = [
-                transfer for transfer in transaction.erc20_transfers
-                if transfer.from_address == wallet
-            ]
-            native_outflow = (
-                transaction.from_address == wallet
-                and int(transaction.native_value_wei) > 0
-            )
-            if not token_outflows and not native_outflow:
-                continue
-
-            candidate.transaction_from = transaction.from_address
-            candidate.transaction_to = transaction.to_address
-            candidate.outgoing_transfer_count = max(
-                candidate.outgoing_transfer_count,
-                len(token_outflows) + (1 if native_outflow else 0),
-            )
-
-            if token_outflows and transaction.from_address != wallet:
-                candidate.score += 45
-                self._append_reason(
-                    candidate,
-                    "RPC shows a third-party transaction caller moved wallet tokens",
-                )
-
-            distinct_assets = {t.token_contract for t in token_outflows}
-            if len(distinct_assets) > 1:
-                candidate.score += min(24, 8 * (len(distinct_assets) - 1))
-                self._append_reason(
-                    candidate,
-                    "RPC shows multiple distinct assets leaving the wallet",
-                )
-
-            distinct_destinations = {t.to_address for t in token_outflows}
-            if len(distinct_destinations) > 1:
-                candidate.score += min(12, 4 * (len(distinct_destinations) - 1))
-                self._append_reason(
-                    candidate,
-                    "RPC shows victim funds splitting across destinations",
-                )
-
-            if native_outflow and token_outflows:
-                candidate.score += 8
-                self._append_reason(
-                    candidate,
-                    "RPC shows native and token value leaving together",
-                )
-
-            ranked.append((candidate, transaction))
-
-        if not ranked:
-            raise ValueError(
-                "no discovered candidate contained deterministic value leaving the submitted wallet"
-            )
-
-        ranked.sort(
-            key=lambda item: (
-                item[0].score,
-                item[0].timestamp or datetime.min.replace(tzinfo=timezone.utc),
-            ),
-            reverse=True,
+        """Rank deterministic RPC evidence and refuse to guess on a close result."""
+        return await rank_verified_candidates(
+            self.provider, chain, wallet, discovery
         )
-        discovery.candidates = [candidate for candidate, _ in ranked[:5]]
-        selected, transaction = ranked[0]
-        discovery.selected_transaction_hash = selected.transaction_hash.lower()
-        discovery.selected_score = selected.score
-        return transaction
-
     async def _discover_auto_chain(self, wallet, incident_time):
         if self.discovery is None:
             from .discovery import DiscoveryUnavailableError
@@ -137,7 +35,7 @@ class CaseWorkflow:
             try:
                 discovery = await self.discovery.discover(chain, wallet, incident_time)
                 transaction = await self._select_verified_incident(chain, wallet, discovery)
-                resolved.append((discovery.selected_score, chain, discovery, transaction))
+                resolved.append((discovery.selected_score or 0, chain, discovery, transaction))
             except Exception as exc:
                 failures.append(f"{chain}: {exc}")
 
@@ -147,7 +45,7 @@ class CaseWorkflow:
                 f"no verified incident found on supported chains ({', '.join(SUPPORTED_CHAINS)}): {detail}"
             )
 
-        resolved.sort(key=lambda item: item[0], reverse=True)
+        resolved.sort(key=lambda item: (item[3] is not None, item[0]), reverse=True)
         _, chain, discovery, transaction = resolved[0]
         return chain, discovery, transaction
 
@@ -201,6 +99,15 @@ class CaseWorkflow:
                     transaction = await self._select_verified_incident(
                         request.chain, wallet, case.discovery
                     )
+                if transaction is None:
+                    case.state = "AMBIGUOUS_INCIDENT"
+                    case.updated_at = datetime.now(timezone.utc)
+                    await self.repository.save(case)
+                    return CaseResponse(
+                        case=case,
+                        factual_source="json_rpc",
+                        agent_runtime="unavailable",
+                    )
                 tx_hash = transaction.hash.lower()
                 case.theft_transaction_hash = tx_hash
                 case.updated_at = datetime.now(timezone.utc)
@@ -219,7 +126,7 @@ class CaseWorkflow:
                             "resolved transaction hash does not match deterministic RPC evidence"
                         )
 
-            if transaction.status != "success" or not self._wallet_outflow(transaction, wallet):
+            if transaction.status != "success" or not wallet_outflow(transaction, wallet):
                 raise ValueError(
                     "the supplied transaction contains no deterministic value leaving the submitted wallet"
                 )
@@ -238,6 +145,7 @@ class CaseWorkflow:
 
             try:
                 case.finding = await self.classifier.classify(case.id, evidence)
+                case.finding.compromise_mechanism_confidence = case.finding.confidence
                 runtime = "google_adk_gemini"
             except (RuntimeError, ValueError) as exc:
                 case.error = str(exc)
