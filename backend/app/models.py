@@ -34,6 +34,14 @@ class ERC20Transfer(BaseModel):
     raw_amount: str
 
 
+
+class NFTTransfer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    log_index: int = Field(ge=0)
+    token_contract: str
+    from_address: str
+    to_address: str
+    token_id: str
 class NormalizedTransaction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     hash: str
@@ -46,6 +54,7 @@ class NormalizedTransaction(BaseModel):
     native_value_wei: str
     input: str
     erc20_transfers: list[ERC20Transfer]
+    nft_transfers: list[NFTTransfer] = Field(default_factory=list)
 
 
 class DeterministicEvidence(BaseModel):
@@ -109,7 +118,7 @@ class AgentFinding(BaseModel):
 
 class InvestigationCase(BaseModel):
     id: str
-    state: Literal["INVESTIGATING", "COMPLETE", "FAILED"]
+    state: Literal["INVESTIGATING", "MONITORING", "ACTIONABLE", "EVIDENCE_READY", "LIMITED", "FAILED"]
     created_at: datetime
     updated_at: datetime
     wallet_address: str

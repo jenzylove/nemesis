@@ -66,8 +66,8 @@ async def test_wallet_only_auto_detects_base_and_persists_resolved_chain():
     repository=InMemoryCaseRepository()
     await repository.initialize()
     workflow=CaseWorkflow(repository,AutoProvider(),StubClassifier(),discovery=AutoDiscovery())
-    response=await workflow.create_and_investigate(CaseCreate(wallet_address=WALLET))
-    assert response.case.state=="COMPLETE"
+    response=await workflow.create_and_investigate(CaseCreate(wallet_address=WALLET), "test-user")
+    assert response.case.state=="EVIDENCE_READY"
     assert response.case.chain=="base"
     assert response.case.theft_transaction_hash==TX_HASH
     assert response.case.evidence.transaction.chain=="base"
@@ -79,7 +79,8 @@ async def test_known_hash_auto_probes_supported_chains():
     await repository.initialize()
     workflow=CaseWorkflow(repository,AutoProvider(),StubClassifier())
     response=await workflow.create_and_investigate(
-        CaseCreate(wallet_address=WALLET,theft_transaction_hash=TX_HASH)
+        CaseCreate(wallet_address=WALLET,theft_transaction_hash=TX_HASH),
+        "test-user",
     )
     assert response.case.chain=="base"
     assert response.case.evidence.transaction.hash==TX_HASH

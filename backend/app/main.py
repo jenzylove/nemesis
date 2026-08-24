@@ -1,5 +1,7 @@
 import logging
+import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -171,6 +173,7 @@ async def health():
     return {
         "status": "ok",
         "runtime": "nemesis",
+        "git_sha": os.getenv("GIT_SHA", "unknown"),
         "environment": settings.app_env,
         "persistence": repository.__class__.__name__,
         "agent": classifier.__class__.__name__,
@@ -190,11 +193,7 @@ async def health():
 @app.post("/v1/cases", response_model=CaseResponse, status_code=201)
 async def create_case(body: CaseCreate, user: dict = Depends(require_case_user)):
     try:
-        response = await workflow.create_and_investigate(body)
-        response.case.owner_user_id = user["sub"]
-        response.case.owner_email = user.get("email")
-        await repository.save(response.case)
-        return response
+        return await workflow.create_and_investigate(body, user["sub"], user.get("email"))
     except IncidentNotFoundError as exc:
         raise HTTPException(422, str(exc)) from exc
     except DiscoveryUnavailableError as exc:
@@ -205,6 +204,8 @@ async def create_case(body: CaseCreate, user: dict = Depends(require_case_user))
         raise HTTPException(404, str(exc)) from exc
     except RpcProviderError as exc:
         raise HTTPException(502, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(503, str(exc)) from exc
 
@@ -229,6 +230,39 @@ async def get_timeline(case_id: str, user: dict = Depends(require_user)):
     return [e.model_dump(mode="json") for e in await taskmaster.repo.get_timeline(case_id)]
 
 
+def asset_totals(case, trace: dict) -> list[dict]:
+    totals: dict[str, dict[str, int]] = {}
+    if case.evidence:
+        transaction = case.evidence.transaction
+        wallet = case.wallet_address.lower()
+        if transaction.from_address == wallet and int(transaction.native_value_wei) > 0:
+            totals["native"] = {
+                "stolen": int(transaction.native_value_wei),
+                "located": 0,
+                "unresolved": 0,
+            }
+        for transfer in transaction.erc20_transfers:
+            if transfer.from_address != wallet:
+                continue
+            total = totals.setdefault(
+                transfer.token_contract,
+                {"stolen": 0, "located": 0, "unresolved": 0},
+            )
+            total["stolen"] += int(transfer.raw_amount)
+    for branch in trace["branches"]:
+        total = totals.setdefault(
+            branch["asset"],
+            {"stolen": 0, "located": 0, "unresolved": 0},
+        )
+        amount = int(branch["amount"])
+        total["located"] += amount
+        if branch["status"] in {"MOVING", "DORMANT", "OBSCURED"}:
+            total["unresolved"] += amount
+    return [
+        {"asset": asset, **values, "unit": "raw"}
+        for asset, values in sorted(totals.items())
+    ]
+
 @app.get("/v1/cases/{case_id}/trace")
 async def get_trace(case_id: str, user: dict = Depends(require_user)):
     await owned_case(case_id, user)
@@ -236,6 +270,44 @@ async def get_trace(case_id: str, user: dict = Depends(require_user)):
         raise HTTPException(503, "tracing runtime unavailable")
     return await taskmaster.case_trace(case_id)
 
+
+
+@app.get("/v1/cases/{case_id}/evidence-package")
+async def get_evidence_package(case_id: str, user: dict = Depends(require_user)):
+    case = await owned_case(case_id, user)
+    if taskmaster is None:
+        raise HTTPException(503, "tracing runtime unavailable")
+    trace = await taskmaster.case_trace(case_id)
+    return {
+        "schema_version": "1.0",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "case_metadata": {
+            "id": case.id, "state": case.state,
+            "created_at": case.created_at.isoformat(),
+            "updated_at": case.updated_at.isoformat(), "chain": case.chain,
+        },
+        "deterministic_facts": {
+            "submitted_wallet": case.wallet_address,
+            "selected_theft_transaction": case.theft_transaction_hash,
+            "discovery": case.discovery.model_dump(mode="json") if case.discovery else None,
+            "normalized_evidence": case.evidence.model_dump(mode="json") if case.evidence else None,
+            "trace_branches": trace["branches"], "graph": trace["graph"],
+            "timeline": trace["timeline"],
+            "monitoring_state": [
+                {"branch_id": b["id"], "status": b["status"],
+                 "last_checked": b["last_checked"], "terminal_reason": b.get("terminal_reason")}
+                for b in trace["branches"]
+            ],
+            "movement_events": [e for e in trace["timeline"] if e["type"] == "MOVEMENT_DETECTED"],
+            "verified_attributions": [b["attribution"] for b in trace["branches"] if b.get("attribution")],
+            "provider_provenance": sorted({
+                item for b in trace["branches"] for item in b.get("evidence_provenance", [])
+                if not item.startswith("0x")
+            }),
+        },
+        "nemesis_assessment": case.finding.model_dump(mode="json") if case.finding else None,
+        "unknowns_and_limitations": case.finding.limitations if case.finding else [case.error or "Model assessment unavailable."],
+    }
 
 @app.post("/internal/monitoring/tick", dependencies=[Depends(require_internal)])
 async def monitoring_tick():

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from .models import ChainName, ERC20Transfer, NormalizedTransaction
+from .models import ChainName, ERC20Transfer, NFTTransfer, NormalizedTransaction
 
 TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 BASE_L1_STANDARD_BRIDGE = "0x3154cf16ccdb4c6d922629664174b904d80f2c35"
@@ -68,6 +68,27 @@ def decode_erc20_transfer_logs(logs: list[dict]) -> list[ERC20Transfer]:
     return transfers
 
 
+
+def decode_erc721_transfer_logs(logs: list[dict]) -> list[NFTTransfer]:
+    transfers = []
+    for log in logs:
+        topics = log.get("topics") or []
+        if len(topics) != 4 or str(topics[0]).lower() != TRANSFER_TOPIC:
+            continue
+        address = log.get("address")
+        if not isinstance(address, str) or len(address) != 42:
+            continue
+        transfers.append(
+            NFTTransfer(
+                log_index=_hex_int(log.get("logIndex")),
+                token_contract=address.lower(),
+                from_address=_topic_address(topics[1]),
+                to_address=_topic_address(topics[2]),
+                token_id=str(_hex_int(topics[3])),
+            )
+        )
+    return transfers
+
 class RpcProviderError(RuntimeError):
     pass
 
@@ -127,6 +148,7 @@ class JsonRpcProvider(BlockchainProvider):
             native_value_wei=str(_hex_int(transaction.get("value"))),
             input=transaction.get("input") or "0x",
             erc20_transfers=decode_erc20_transfer_logs(receipt.get("logs") or []),
+            nft_transfers=decode_erc721_transfer_logs(receipt.get("logs") or []),
         )
 
     async def get_address_movements(

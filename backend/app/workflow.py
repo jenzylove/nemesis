@@ -28,6 +28,9 @@ class CaseWorkflow:
         ) or any(
             transfer.from_address == wallet
             for transfer in transaction.erc20_transfers
+        ) or any(
+            transfer.from_address == wallet
+            for transfer in transaction.nft_transfers
         )
 
     async def _select_verified_incident(self, chain, wallet, discovery):
@@ -162,7 +165,7 @@ class CaseWorkflow:
             f"transaction hash was not found on supported chains ({', '.join(SUPPORTED_CHAINS)}): {detail}"
         )
 
-    async def create_and_investigate(self, request: CaseCreate) -> CaseResponse:
+    async def create_and_investigate(self, request: CaseCreate, owner_user_id: str, owner_email: str | None = None) -> CaseResponse:
         now = datetime.now(timezone.utc)
         wallet = request.wallet_address.lower()
         supplied_hash = request.theft_transaction_hash.lower() if request.theft_transaction_hash else None
@@ -173,10 +176,10 @@ class CaseWorkflow:
             updated_at=now,
             wallet_address=wallet,
             chain=request.chain,
+            owner_user_id=owner_user_id,
+            owner_email=owner_email,
             theft_transaction_hash=supplied_hash,
         )
-        await self.repository.save(case)
-
         try:
             if supplied_hash is None:
                 if request.chain == "auto":
@@ -216,6 +219,11 @@ class CaseWorkflow:
                             "resolved transaction hash does not match deterministic RPC evidence"
                         )
 
+            if transaction.status != "success" or not self._wallet_outflow(transaction, wallet):
+                raise ValueError(
+                    "the supplied transaction contains no deterministic value leaving the submitted wallet"
+                )
+
             evidence = DeterministicEvidence(
                 submitted_wallet=wallet,
                 transaction=transaction,
@@ -224,18 +232,29 @@ class CaseWorkflow:
             case.updated_at = datetime.now(timezone.utc)
             await self.repository.save(case)
 
+            branches = []
             if self.taskmaster:
-                await self.taskmaster.trace_initial(case.id, evidence)
+                branches = await self.taskmaster.trace_initial(case.id, evidence)
 
             try:
                 case.finding = await self.classifier.classify(case.id, evidence)
-                case.state = "COMPLETE"
                 runtime = "google_adk_gemini"
             except (RuntimeError, ValueError) as exc:
-                case.state = "FAILED"
                 case.error = str(exc)
                 runtime = "unavailable"
 
+            if self.taskmaster:
+                statuses = {branch.status for branch in (branches or []) if branch}
+                if "ACTIONABLE" in statuses:
+                    case.state = "ACTIONABLE"
+                elif "DORMANT" in statuses:
+                    case.state = "MONITORING"
+                elif branches:
+                    case.state = "INVESTIGATING"
+                else:
+                    case.state = "LIMITED"
+            else:
+                case.state = "EVIDENCE_READY"
             case.updated_at = datetime.now(timezone.utc)
             await self.repository.save(case)
             return CaseResponse(case=case, factual_source="json_rpc", agent_runtime=runtime)
@@ -243,5 +262,6 @@ class CaseWorkflow:
             case.state = "FAILED"
             case.error = str(exc)
             case.updated_at = datetime.now(timezone.utc)
-            await self.repository.save(case)
+            if case.evidence is not None:
+                await self.repository.save(case)
             raise

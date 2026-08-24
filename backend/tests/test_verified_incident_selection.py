@@ -121,7 +121,8 @@ async def test_rpc_drain_evidence_can_rerank_and_exact_selection_is_traced():
     )
 
     response = await workflow.create_and_investigate(
-        CaseCreate(wallet_address=WALLET, chain="ethereum")
+        CaseCreate(wallet_address=WALLET, chain="ethereum"),
+        "test-user",
     )
 
     assert response.case.theft_transaction_hash == TX_B
@@ -133,4 +134,4 @@ async def test_rpc_drain_evidence_can_rerank_and_exact_selection_is_traced():
     )
     assert recorder.evidence.transaction.hash == TX_B
     assert response.case.finding.classification == "unknown"
-    assert response.case.state == "COMPLETE"
+    assert response.case.state == "LIMITED"

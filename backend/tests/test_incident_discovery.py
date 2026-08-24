@@ -88,9 +88,10 @@ async def test_wallet_only_workflow_discovers_then_rpc_verifies_transaction():
             wallet_address=WALLET,
             chain="ethereum",
             incident_time=datetime(2026, 8, 22, 12, 0, tzinfo=timezone.utc),
-        )
+        ),
+        "test-user",
     )
-    assert response.case.state == "COMPLETE"
+    assert response.case.state == "EVIDENCE_READY"
     assert response.case.theft_transaction_hash == TX_HASH
     assert response.case.discovery
     assert response.case.discovery.source == "bitquery"

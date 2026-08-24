@@ -10,7 +10,7 @@ ALLOWED_EVIDENCE_REFERENCES = {
     "submitted_wallet", "transaction.hash", "transaction.chain",
     "transaction.block_number", "transaction.timestamp", "transaction.status",
     "transaction.from_address", "transaction.to_address", "transaction.native_value_wei",
-    "transaction.input", "transaction.erc20_transfers",
+    "transaction.input", "transaction.erc20_transfers", "transaction.nft_transfers",
 }
 
 class InvestigationClassifier(ABC):
@@ -22,6 +22,34 @@ class UnavailableClassifier(InvestigationClassifier):
     async def classify(self, case_id, evidence):
         raise RuntimeError("Google Gemini credentials are not configured")
 
+
+def evidence_consistent_fallback(evidence: DeterministicEvidence) -> AgentFinding:
+    transaction = evidence.transaction
+    native = int(transaction.native_value_wei) > 0
+    token_count = len(transaction.erc20_transfers)
+    nft_count = len(transaction.nft_transfers)
+    if nft_count:
+        activity = "NFT transfers"
+        references = ["transaction.nft_transfers"]
+    elif native and token_count:
+        activity = "native value and token transfers"
+        references = ["transaction.native_value_wei", "transaction.erc20_transfers"]
+    elif token_count:
+        activity = "token transfers"
+        references = ["transaction.erc20_transfers"]
+    elif native:
+        activity = "native value movement"
+        references = ["transaction.native_value_wei"]
+    else:
+        activity = "no decoded value movement"
+        references = ["transaction.status"]
+    return AgentFinding(
+        classification="unknown",
+        summary=f"The supplied transaction contains verified {activity}, but the deterministic evidence is insufficient to determine the compromise mechanism.",
+        confidence=0.1,
+        evidence_references=["submitted_wallet", *references],
+        limitations=["Only the supplied transaction was examined."],
+    )
 def ensure_facts_unchanged(before: DeterministicEvidence, after: DeterministicEvidence) -> None:
     if before.model_dump(mode="json") != after.model_dump(mode="json"):
         raise ValueError("agent attempted to alter deterministic evidence")
@@ -31,6 +59,8 @@ def validate_agent_finding(finding: AgentFinding, evidence: DeterministicEvidenc
     for reference in finding.evidence_references:
         if reference.startswith("transaction.erc20_transfers"):
             reference="transaction.erc20_transfers"
+        if reference.startswith("transaction.nft_transfers"):
+            reference="transaction.nft_transfers"
         canonical.append(reference)
     finding.evidence_references=list(dict.fromkeys(canonical))
     if set(finding.evidence_references) - ALLOWED_EVIDENCE_REFERENCES:
@@ -57,6 +87,38 @@ def validate_agent_finding(finding: AgentFinding, evidence: DeterministicEvidenc
         raise ValueError("agent returned unsupported named entity attribution: "+", ".join(unsupported_names))
     if unsupported:
         raise ValueError("agent returned unsupported semantic attribution: "+", ".join(unsupported))
+
+    wallet = evidence.submitted_wallet.lower()
+    transaction = evidence.transaction
+    token_outflow = any(t.from_address == wallet for t in transaction.erc20_transfers)
+    native_outflow = transaction.from_address == wallet and int(transaction.native_value_wei) > 0
+    third_party_spend = token_outflow and transaction.from_address != wallet
+    contract_call = transaction.input not in ("", "0x", "0x0")
+    prerequisites = {
+        "suspicious_spender": (third_party_spend, 0.65),
+        "possible_private_key_compromise": (
+            transaction.from_address == wallet and (token_outflow or native_outflow),
+            0.40,
+        ),
+        "malicious_contract": (contract_call and (token_outflow or native_outflow), 0.45),
+        # Approval, permit, phishing, and protocol-exploit mechanisms require
+        # decoded evidence not present in the normalized transaction schema.
+        "malicious_approval": (False, 0.0),
+        "permit_or_signature_theft": (False, 0.0),
+        "phishing_dapp": (False, 0.0),
+        "protocol_exploit": (False, 0.0),
+        "unknown": (True, 0.30),
+    }
+    supported, confidence_cap = prerequisites[finding.classification]
+    if not supported:
+        finding.classification = "unknown"
+        finding.confidence = min(finding.confidence, 0.15)
+        finding.limitations = list(dict.fromkeys([
+            *finding.limitations,
+            "The deterministic evidence does not contain the prerequisites for the proposed compromise mechanism.",
+        ]))
+    else:
+        finding.confidence = min(finding.confidence, confidence_cap)
     return finding
 
 class GoogleAdkClassifier(InvestigationClassifier):
@@ -92,7 +154,7 @@ class GoogleAdkClassifier(InvestigationClassifier):
                 " Evidence references must be chosen verbatim from: submitted_wallet, transaction.hash, "
                 "transaction.chain, transaction.block_number, transaction.timestamp, transaction.status, "
                 "transaction.from_address, transaction.to_address, transaction.native_value_wei, "
-                "transaction.input, transaction.erc20_transfers."
+                "transaction.input, transaction.erc20_transfers, transaction.nft_transfers."
             ),
             tools=[get_deterministic_transaction_evidence],
             output_schema=AgentFinding,
@@ -123,12 +185,10 @@ class GoogleAdkClassifier(InvestigationClassifier):
         try:
             finding = validate_agent_finding(await run_turn(message),evidence)
         except (json.JSONDecodeError, ValidationError, ValueError) as first_error:
+            safe = evidence_consistent_fallback(evidence)
             correction = types.Content(role="user", parts=[types.Part(text=(
                 "Your previous structured response failed validation. Do not call the evidence tool again. "
-                "Return the required schema with these exact safe values: classification unknown; "
-                "summary 'The supplied transaction contains confirmed token transfer activity, but the deterministic evidence is insufficient to determine the compromise mechanism.'; "
-                "confidence 0.1; evidence_references ['submitted_wallet','transaction.status','transaction.erc20_transfers']; "
-                "limitations ['Only the supplied transaction was examined.']. Add no other words or fields."
+                "Return only this exact JSON object: " + json.dumps(safe.model_dump(mode="json"))
             ))])
             try:
                 finding = validate_agent_finding(await run_turn(correction),evidence)

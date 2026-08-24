@@ -2,11 +2,11 @@ from datetime import datetime, timezone
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from app.agent_runtime import InvestigationClassifier, UnavailableClassifier, ensure_facts_unchanged, validate_agent_finding
+from app.agent_runtime import InvestigationClassifier, UnavailableClassifier, ensure_facts_unchanged, evidence_consistent_fallback, validate_agent_finding
 from app.attribution import CuratedAttributionProvider, EntityAttribution, EntityAttributionProvider
 from app.config import Settings
 from app.models import AgentFinding, CaseCreate, DeterministicEvidence, NormalizedTransaction
-from app.providers import JsonRpcProvider, TRANSFER_TOPIC, decode_erc20_transfer_logs
+from app.providers import JsonRpcProvider, TRANSFER_TOPIC, decode_erc20_transfer_logs, decode_erc721_transfer_logs
 from app.repository import InMemoryCaseRepository
 from app.taskmaster import EventPublisher, InMemoryMonitoringRepository, Taskmaster
 from app.workflow import CaseWorkflow
@@ -84,6 +84,32 @@ def test_erc20_transfer_log_decoding():
     assert transfers[0].from_address == FROM and transfers[0].to_address == TO
     assert transfers[0].token_contract == TOKEN and transfers[0].raw_amount == '987654321'
 
+def test_erc721_transfer_log_decoding():
+    nft_log = {
+        "logIndex": "0x3",
+        "address": TOKEN,
+        "topics": [TRANSFER_TOPIC, topic(FROM), topic(TO), hex(42)],
+        "data": "0x",
+    }
+    transfers = decode_erc721_transfer_logs([nft_log])
+    assert len(transfers) == 1
+    assert transfers[0].token_id == "42"
+    assert transfers[0].from_address == FROM
+    assert transfers[0].to_address == TO
+
+def test_fallback_matches_native_only_evidence():
+    evidence = DeterministicEvidence(
+        submitted_wallet=FROM,
+        transaction=make_tx(TX_HASH, "ethereum", 1, FROM, TO, native=5),
+    )
+    finding = evidence_consistent_fallback(evidence)
+    assert "native value movement" in finding.summary
+    assert "token transfer activity" not in finding.summary
+    assert finding.evidence_references == [
+        "submitted_wallet",
+        "transaction.native_value_wei",
+    ]
+
 def test_agent_cannot_overwrite_deterministic_facts():
     tx = make_tx(TX_HASH, 'ethereum', 1, FROM, TO)
     original = DeterministicEvidence(submitted_wallet=WALLET, transaction=tx)
@@ -124,12 +150,12 @@ async def test_case_creation_persistence_and_api_response_structure():
     repository = InMemoryCaseRepository()
     await repository.initialize()
     workflow = CaseWorkflow(repository, FixtureRpc(), FixtureClassifier())
-    request = CaseCreate(wallet_address=WALLET, chain='ethereum', theft_transaction_hash=TX_HASH)
-    first = await workflow.create_and_investigate(request)
-    second = await workflow.create_and_investigate(request)
+    request = CaseCreate(wallet_address=FROM, chain='ethereum', theft_transaction_hash=TX_HASH)
+    first = await workflow.create_and_investigate(request, "test-user")
+    second = await workflow.create_and_investigate(request, "test-user")
     assert first.case.id != second.case.id
     stored = await repository.get(first.case.id)
-    assert stored and stored.state == 'COMPLETE' and stored.evidence
+    assert stored and stored.state == 'EVIDENCE_READY' and stored.evidence
     payload = first.model_dump(mode='json')
     assert payload['factual_source'] == 'json_rpc' and payload['agent_runtime'] == 'google_adk_gemini'
     assert payload['case']['evidence']['transaction']['erc20_transfers'][0]['raw_amount'] == '255'
@@ -140,8 +166,8 @@ async def test_rpc_evidence_is_persisted_when_gemini_credentials_are_missing():
     repository = InMemoryCaseRepository()
     await repository.initialize()
     workflow = CaseWorkflow(repository, FixtureRpc(), UnavailableClassifier())
-    response = await workflow.create_and_investigate(CaseCreate(wallet_address=WALLET, chain='ethereum', theft_transaction_hash=TX_HASH))
-    assert response.agent_runtime == 'unavailable' and response.case.state == 'FAILED'
+    response = await workflow.create_and_investigate(CaseCreate(wallet_address=FROM, chain='ethereum', theft_transaction_hash=TX_HASH), "test-user")
+    assert response.agent_runtime == 'unavailable' and response.case.state == 'EVIDENCE_READY'
     stored = await repository.get(response.case.id)
     assert stored and stored.evidence and (stored.evidence.transaction.hash == TX_HASH) and (stored.finding is None)
 

@@ -26,6 +26,8 @@ class MonitoringRepository:
     async def get_branch(self,i):raise NotImplementedError
     async def list_branches(self,case_id=None,status=None):raise NotImplementedError
     async def claim_event(self,i):raise NotImplementedError
+    async def complete_event(self,i):raise NotImplementedError
+    async def release_event(self,i):raise NotImplementedError
     async def append_timeline(self,e):raise NotImplementedError
     async def get_timeline(self,c):raise NotImplementedError
     async def save_node(self,n):raise NotImplementedError
@@ -39,6 +41,8 @@ class InMemoryMonitoringRepository(MonitoringRepository):
     async def claim_event(self,i):
         if i in self.claims:return False
         self.claims.add(i);return True
+    async def complete_event(self,i):return None
+    async def release_event(self,i):self.claims.discard(i)
     async def append_timeline(self,e):self.timeline[e.id]=deepcopy(e);return e
     async def get_timeline(self,c):return sorted([deepcopy(x) for x in self.timeline.values() if x.case_id==c],key=lambda x:x.created_at)
     async def save_node(self,n):self.nodes[n.id]=deepcopy(n);return n
@@ -58,6 +62,8 @@ class FirestoreMonitoringRepository(MonitoringRepository):
         from google.api_core.exceptions import AlreadyExists
         try:await self.client.collection("processed_events").document(i).create({"processed_at":datetime.now(timezone.utc)});return True
         except AlreadyExists:return False
+    async def complete_event(self,i):await self.client.collection("processed_events").document(i).set({"status":"COMPLETED","processed_at":datetime.now(timezone.utc)})
+    async def release_event(self,i):await self.client.collection("processed_events").document(i).delete()
     async def append_timeline(self,e):await self.client.collection("case_timeline").document(e.id).set(e.model_dump(mode="python"));return e
     async def get_timeline(self,c):
         docs=self.client.collection("case_timeline").where("case_id","==",c).stream();items=[TimelineEvent.model_validate(d.to_dict()) async for d in docs];return sorted(items,key=lambda x:x.created_at)
@@ -90,9 +96,15 @@ class Taskmaster:
         return len(bs)
     async def consume(self,e):
         if not await self.repo.claim_event(e["id"]):return {"duplicate":True}
-        if e["type"]=="RECHECK_REQUESTED":return await self.recheck(e["branch_id"])
-        if e["type"]=="TRACE_REQUESTED":return await self.resume(e["branch_id"],e["transaction_hash"])
-        raise ValueError("unsupported event type")
+        try:
+            if e["type"]=="RECHECK_REQUESTED":result=await self.recheck(e["branch_id"])
+            elif e["type"]=="TRACE_REQUESTED":result=await self.resume(e["branch_id"],e["transaction_hash"])
+            else:raise ValueError("unsupported event type")
+        except Exception:
+            await self.repo.release_event(e["id"])
+            raise
+        await self.repo.complete_event(e["id"])
+        return result
     async def recheck(self,bid):
         b=await self.repo.get_branch(bid)
         if not b or b.status!="DORMANT":return {"ignored":True}
@@ -152,7 +164,7 @@ class Taskmaster:
         outs=[{"asset":t.token_contract,"amount":t.raw_amount,"ref":f"transaction.erc20_transfers[{i}]","order":t.log_index} for i,t in enumerate(tx.erc20_transfers) if t.to_address==wallet and t.token_contract!=b.asset]
         return {"outputs":sorted(outs,key=lambda x:x["order"]),"spent_amount":str(spent),"remaining_amount":str(max(0,total-spent)),"spent_refs":refs} if outs else None
     async def _apply(self,b,tx,ps):
-        source=b.current_address;parent=b.id;depth=b.depth+1;moved=sum(int(p["amount"]) for p in ps);res=max(0,int(b.amount)-moved);keep=res>0 and b.asset!="native";split=len(ps)>1 or keep
+        source=b.current_address;parent=b.id;depth=b.depth+1;moved=sum(int(p["amount"]) for p in ps);res=max(0,int(b.amount)-moved);keep=res>0;split=len(ps)>1 or keep
         if split:await self._timeline(b.case_id,"FUND_SPLIT_DETECTED","Fund split detected",{"branch_id":parent,"transaction_hash":tx.hash,"path_count":len(ps)+(1 if keep else 0),"asset":b.asset,"residual_amount":str(res) if keep else "0"})
         out=[]
         for i,p in enumerate(ps):
