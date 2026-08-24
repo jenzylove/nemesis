@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
+from .models import NativeTransfer
+
 MIN_SELECTION_CONFIDENCE = 0.70
 MIN_SCORE_MARGIN = 12.0
 RPC_CONCURRENCY = 4
@@ -17,7 +19,9 @@ def _append_reason(candidate, reason: str) -> None:
 def wallet_outflow(transaction, wallet: str) -> bool:
     return (
         transaction.from_address == wallet and int(transaction.native_value_wei) > 0
-    ) or any(t.from_address == wallet for t in transaction.erc20_transfers) or any(
+    ) or any(t.from_address == wallet for t in transaction.native_transfers) or any(
+        t.from_address == wallet for t in transaction.erc20_transfers
+    ) or any(
         t.from_address == wallet for t in transaction.nft_transfers
     )
 
@@ -49,23 +53,30 @@ async def rank_verified_candidates(provider, chain, wallet, discovery):
                 transaction = await provider.get_normalized_transaction(chain, tx_hash)
             except Exception:
                 return None
-            if (
-                transaction.hash.lower() != tx_hash
-                or transaction.status != "success"
-                or not wallet_outflow(transaction, wallet)
-            ):
+            if transaction.hash.lower() != tx_hash or transaction.status != "success":
+                return None
+            if int(candidate.native_outflow_wei) > 0 and candidate.indexed_native_destination:
+                transaction.native_transfers.append(NativeTransfer(
+                    from_address=wallet,
+                    to_address=candidate.indexed_native_destination,
+                    raw_amount=candidate.native_outflow_wei,
+                    provenance=candidate.indexed_evidence_provenance,
+                ))
+            if not wallet_outflow(transaction, wallet):
                 return None
 
             tokens = [t for t in transaction.erc20_transfers if t.from_address == wallet]
             nfts = [t for t in transaction.nft_transfers if t.from_address == wallet]
-            native = transaction.from_address == wallet and int(transaction.native_value_wei) > 0
+            indexed_native = [t for t in transaction.native_transfers if t.from_address == wallet]
+            native = (transaction.from_address == wallet and int(transaction.native_value_wei) > 0) or bool(indexed_native)
             assets = {t.token_contract for t in tokens}
             assets.update(f"nft:{t.token_contract}:{t.token_id}" for t in nfts)
             if native:
                 assets.add("native")
             destinations = {t.to_address for t in tokens + nfts}
-            if native and transaction.to_address:
+            if transaction.from_address == wallet and int(transaction.native_value_wei) > 0 and transaction.to_address:
                 destinations.add(transaction.to_address)
+            destinations.update(t.to_address for t in indexed_native)
 
             candidate.transaction_from = transaction.from_address
             candidate.transaction_to = transaction.to_address
@@ -75,7 +86,7 @@ async def rank_verified_candidates(provider, chain, wallet, discovery):
             candidate.method_id = transaction.input[:10] if len(transaction.input) >= 10 else None
             candidate.token_outflow_count = len(tokens)
             candidate.nft_outflow_count = len(nfts)
-            candidate.native_outflow_wei = transaction.native_value_wei if native else "0"
+            candidate.native_outflow_wei = str((int(transaction.native_value_wei) if transaction.from_address == wallet else 0) + sum(int(t.raw_amount) for t in indexed_native))
             candidate.asset_count = len(assets)
             candidate.destination_count = len(destinations)
             candidate.outgoing_transfer_count = max(
@@ -84,7 +95,10 @@ async def rank_verified_candidates(provider, chain, wallet, discovery):
             candidate.outflow_summary = sorted(assets)[:12]
             candidate.destination_summary = sorted(destinations)[:12]
 
-            if (tokens or nfts) and transaction.from_address != wallet:
+            if indexed_native and transaction.from_address != wallet:
+                candidate.score += 65
+                _append_reason(candidate, "RPC transaction verification plus indexed internal-call evidence shows a third-party caller moved native value")
+            elif (tokens or nfts) and transaction.from_address != wallet:
                 candidate.score += 52
                 _append_reason(candidate, "RPC shows a third-party transaction caller moved wallet assets")
             if len(assets) > 1:

@@ -18,3 +18,10 @@ test("investigation submission and polling are bounded and duplicate-safe",async
   assert.match(page,/controller\.abort\(\),10000/);
   assert.match(auth,/if\(refreshInFlight\.current\)return/);
 });
+test("account dock renders one intentional My investigations control",async()=>{
+ const source=await readFile(new URL("../app/auth-gate.tsx",import.meta.url),"utf8");
+ const dock=source.match(/<div className="authDock"[\s\S]*?<\/div>/)?.[0]||"";
+ assert.equal((dock.match(/My investigations/g)||[]).length,0);
+ assert.match(dock,/\{label\}/);
+ assert.doesNotMatch(dock,/className="authMini"/);
+});

@@ -188,7 +188,6 @@ export default function AuthGate(){
   const actionable=reopened?.trace.branches.filter(branch=>branch.status==="ACTIONABLE").length||0;
   return <>
     <div className="authDock" role="navigation" aria-label="Account">
-      {user&&<button type="button" className="authMini" onClick={loadCases}>My investigations</button>}
       <button type="button" className="authPrimary" onClick={()=>user?loadCases():setModal(true)}>{label}</button>
     </div>
 
