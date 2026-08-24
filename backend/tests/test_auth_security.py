@@ -126,3 +126,36 @@ async def test_unrelated_hash_creates_no_case():
             "user-a",
         )
     assert await repository.list_by_owner("user-a") == []
+
+
+class TraceStub:
+    async def case_trace(self, case_id):
+        return {
+            "branches": [],
+            "graph": {"nodes": [], "edges": []},
+            "timeline": [],
+        }
+
+
+@pytest.mark.asyncio
+async def test_owner_evidence_package_separates_facts_and_assessment(monkeypatch):
+    repository = InMemoryCaseRepository()
+    await repository.initialize()
+    workflow = CaseWorkflow(repository, AuthProvider(), UnknownClassifier())
+    response = await workflow.create_and_investigate(
+        CaseCreate(
+            wallet_address=WALLET,
+            chain="ethereum",
+            theft_transaction_hash=TX_HASH,
+        ),
+        "user-a",
+    )
+    monkeypatch.setattr(main, "repository", repository)
+    monkeypatch.setattr(main, "taskmaster", TraceStub())
+
+    package = await main.get_evidence_package(response.case.id, {"sub": "user-a"})
+    assert package["case_metadata"]["id"] == response.case.id
+    assert package["deterministic_facts"]["submitted_wallet"] == WALLET
+    assert package["deterministic_facts"]["normalized_evidence"]["transaction"]["hash"] == TX_HASH
+    assert package["nemesis_assessment"]["classification"] == "unknown"
+    assert package["generated_at"]
