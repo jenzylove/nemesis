@@ -25,6 +25,7 @@ from .movement import (
     BitqueryRealtimeMovementDetector,
     HybridMovementProvider,
 )
+from .outcome import build_outcome, derive_case_state
 from .providers import JsonRpcProvider, RpcProviderError
 from .repository import repository_from_settings
 from .taskmaster import (
@@ -241,6 +242,11 @@ def asset_totals(case, trace: dict) -> list[dict]:
                 "located": 0,
                 "unresolved": 0,
             }
+        for transfer in transaction.native_transfers:
+            if transfer.from_address != wallet:
+                continue
+            total = totals.setdefault("native", {"stolen": 0, "located": 0, "unresolved": 0})
+            total["stolen"] += int(transfer.raw_amount)
         for transfer in transaction.erc20_transfers:
             if transfer.from_address != wallet:
                 continue
@@ -270,6 +276,13 @@ async def get_trace(case_id: str, user: dict = Depends(require_user)):
         raise HTTPException(503, "tracing runtime unavailable")
     trace = await taskmaster.case_trace(case_id)
     trace["asset_totals"] = asset_totals(case, trace)
+    trace["outcome"] = build_outcome(trace["asset_totals"], trace)
+    state = derive_case_state(trace["branches"], case.state)
+    if state != case.state:
+        case.state = state
+        case.updated_at = datetime.now(timezone.utc)
+        await repository.save(case)
+    trace["case_state"] = state
     return trace
 
 
@@ -295,6 +308,7 @@ async def get_evidence_package(case_id: str, user: dict = Depends(require_user))
             "normalized_evidence": case.evidence.model_dump(mode="json") if case.evidence else None,
             "trace_branches": trace["branches"], "graph": trace["graph"],
             "asset_totals": asset_totals(case, trace),
+            "current_outcome": build_outcome(asset_totals(case, trace), trace),
             "timeline": trace["timeline"],
             "monitoring_state": [
                 {"branch_id": b["id"], "status": b["status"],

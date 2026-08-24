@@ -1,4 +1,4 @@
-import base64,hashlib,json
+import asyncio,base64,hashlib,json
 from copy import deepcopy
 from datetime import datetime,timezone
 from typing import Literal
@@ -83,7 +83,7 @@ class GooglePubSubPublisher(EventPublisher):
 
 class Taskmaster:
     def __init__(self,repo,provider,publisher,max_blocks=20,max_depth=8,attribution_provider=None):
-        self.repo,self.provider,self.publisher,self.max_blocks,self.max_depth=repo,provider,publisher,max_blocks,max_depth;self.attribution_provider=attribution_provider or CuratedAttributionProvider()
+        self.repo,self.provider,self.publisher,self.max_blocks,self.max_depth=repo,provider,publisher,max_blocks,max_depth;self.attribution_provider=attribution_provider or CuratedAttributionProvider();self.monitoring_gate=asyncio.Semaphore(2)
     async def trace_initial(self,case_id,evidence:DeterministicEvidence):
         tx=evidence.transaction;wallet=evidence.submitted_wallet.lower();await self._timeline(case_id,"TRACING_FUNDS","Tracing funds",{"transaction_hash":tx.hash});branches=[];now=datetime.now(timezone.utc)
         for i,p in enumerate(self._paths(tx,wallet,None,None)):
@@ -97,9 +97,10 @@ class Taskmaster:
     async def consume(self,e):
         if not await self.repo.claim_event(e["id"]):return {"duplicate":True}
         try:
-            if e["type"]=="RECHECK_REQUESTED":result=await self.recheck(e["branch_id"])
-            elif e["type"]=="TRACE_REQUESTED":result=await self.resume(e["branch_id"],e["transaction_hash"])
-            else:raise ValueError("unsupported event type")
+            async with self.monitoring_gate:
+                if e["type"]=="RECHECK_REQUESTED":result=await self.recheck(e["branch_id"])
+                elif e["type"]=="TRACE_REQUESTED":result=await self.resume(e["branch_id"],e["transaction_hash"])
+                else:raise ValueError("unsupported event type")
         except Exception:
             await self.repo.release_event(e["id"])
             raise
@@ -141,6 +142,9 @@ class Taskmaster:
     def _paths(self,tx,source,asset,amount):
         source=source.lower();c=[]
         if asset in (None,"native") and tx.from_address==source and tx.to_address and int(tx.native_value_wei)>0:c.append({"destination":tx.to_address.lower(),"asset":"native","amount":tx.native_value_wei,"ref":"transaction.native_value_wei","order":-1})
+        if asset in (None,"native"):
+            for i,t in enumerate(tx.native_transfers):
+                if t.from_address==source:c.append({"destination":t.to_address.lower(),"asset":"native","amount":t.raw_amount,"ref":f"transaction.native_transfers[{i}]","order":i})
         for i,t in enumerate(tx.erc20_transfers):
             if t.from_address==source and (asset is None or asset==t.token_contract):c.append({"destination":t.to_address,"asset":t.token_contract,"amount":t.raw_amount,"ref":f"transaction.erc20_transfers[{i}]","order":t.log_index})
         c.sort(key=lambda x:x["order"])

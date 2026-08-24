@@ -1,3 +1,4 @@
+import asyncio
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
@@ -94,22 +95,39 @@ class RpcProviderError(RuntimeError):
 
 
 class JsonRpcProvider(BlockchainProvider):
-    def __init__(self, rpc_urls: dict[ChainName, str], timeout_seconds: float = 20):
+    def __init__(self, rpc_urls: dict[ChainName, str], timeout_seconds: float = 20, transport: httpx.AsyncBaseTransport | None = None):
         self.rpc_urls = rpc_urls
         self.timeout_seconds = timeout_seconds
+        self.transport = transport
 
     async def _call(self, chain: ChainName, method: str, params: list) -> dict | list | str | None:
         url = self.rpc_urls.get(chain)
         if not url:
             raise RpcProviderError(f"RPC URL is not configured for {chain}")
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(
-                    url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-                )
-                payload = response.json()
-        except (httpx.HTTPError, ValueError) as exc:
-            raise RpcProviderError(f"RPC {method} request failed") from exc
+        last_error = None
+        async with httpx.AsyncClient(timeout=self.timeout_seconds, transport=self.transport) as client:
+            for attempt in range(3):
+                try:
+                    response = await client.post(
+                        url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+                    )
+                    if response.status_code == 429 or response.status_code >= 500:
+                        retry_after = response.headers.get("retry-after")
+                        delay = min(2.0, float(retry_after)) if retry_after and retry_after.replace(".", "", 1).isdigit() else 0.25 * (2 ** attempt)
+                        last_error = RpcProviderError(f"RPC {method} provider throttled or unavailable ({response.status_code})")
+                        if attempt < 2:
+                            await asyncio.sleep(delay)
+                            continue
+                        raise last_error
+                    response.raise_for_status()
+                    payload = response.json()
+                    break
+                except (httpx.HTTPError, ValueError) as exc:
+                    last_error = exc
+                    if attempt < 2:
+                        await asyncio.sleep(0.25 * (2 ** attempt))
+                        continue
+                    raise RpcProviderError(f"RPC {method} request failed after bounded retries") from exc
         if payload.get("jsonrpc") != "2.0" or payload.get("id") != 1:
             raise RpcProviderError(f"RPC {method} returned an invalid response")
         if payload.get("error"):
@@ -117,7 +135,6 @@ class JsonRpcProvider(BlockchainProvider):
                 f"RPC {method} failed: {payload['error'].get('message', 'provider error')}"
             )
         return payload.get("result")
-
     async def get_normalized_transaction(self, chain: ChainName, tx_hash: str) -> NormalizedTransaction:
         transaction = await self._call(chain, "eth_getTransactionByHash", [tx_hash])
         if not transaction:

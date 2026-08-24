@@ -25,6 +25,14 @@ class CaseCreate(BaseModel):
         return value
 
 
+
+class NativeTransfer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    from_address: str
+    to_address: str
+    raw_amount: str
+    provenance: list[str] = Field(default_factory=list)
+
 class ERC20Transfer(BaseModel):
     model_config = ConfigDict(extra="forbid")
     log_index: int = Field(ge=0)
@@ -52,6 +60,7 @@ class NormalizedTransaction(BaseModel):
     from_address: str
     to_address: str | None
     native_value_wei: str
+    native_transfers: list[NativeTransfer] = Field(default_factory=list)
     input: str
     erc20_transfers: list[ERC20Transfer]
     nft_transfers: list[NFTTransfer] = Field(default_factory=list)
@@ -78,6 +87,8 @@ class DiscoveryCandidate(BaseModel):
     asset_count: int = Field(default=0, ge=0)
     destination_count: int = Field(default=0, ge=0)
     native_outflow_wei: str = "0"
+    indexed_native_destination: str | None = None
+    indexed_evidence_provenance: list[str] = Field(default_factory=list, max_length=8)
     token_outflow_count: int = Field(default=0, ge=0)
     nft_outflow_count: int = Field(default=0, ge=0)
     caller_relationship: Literal["wallet", "third_party"] | None = None
