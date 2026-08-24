@@ -1,5 +1,6 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
+import {validateEvmAddress,validateTransactionHash} from "./evm-validation.mjs";
 
 type Transfer={log_index:number;token_contract:string;from_address:string;to_address:string;raw_amount:string};
 type NFTTransfer={log_index:number;token_contract:string;from_address:string;to_address:string;token_id:string};
@@ -89,14 +90,16 @@ function Landing({onStart,onDemo}:{onStart:()=>void;onDemo:()=>void}){
 }
 
 function Intake({onBack,onReal,onDemo}:{onBack:()=>void;onReal:(data:RealResponse)=>void;onDemo:()=>void}){
- const[wallet,setWallet]=useState("");const[chain,setChain]=useState("ethereum");const[hash,setHash]=useState("");const[incidentTime,setIncidentTime]=useState("");const[loading,setLoading]=useState(false);const[error,setError]=useState("");
- const cleanHash=hash.trim();const hashValid=!cleanHash||cleanHash.length===66;
+ const[wallet,setWallet]=useState("");const[chain,setChain]=useState("ethereum");const[hash,setHash]=useState("");const[incidentTime,setIncidentTime]=useState("");const[loading,setLoading]=useState(false);const[error,setError]=useState("");const[walletTouched,setWalletTouched]=useState(false);const[hashTouched,setHashTouched]=useState(false);
+ const cleanWallet=wallet.trim();const cleanHash=hash.trim();const walletError=validateEvmAddress(wallet);const hashError=validateTransactionHash(hash);const canSubmit=!loading&&!walletError&&!hashError;
  async function submit(){
+  setWalletTouched(true);setHashTouched(true);
+  if(walletError||hashError)return;
   setLoading(true);setError("");
   try{
    const api=process.env.NEXT_PUBLIC_NEMESIS_API_URL;
    if(!api)throw new Error("The real investigation API is not configured for this deployment.");
-   const body:Record<string,string>={wallet_address:wallet.trim(),chain};
+   const body:Record<string,string>={wallet_address:cleanWallet,chain};
    if(cleanHash)body.theft_transaction_hash=cleanHash;
    if(incidentTime)body.incident_time=new Date(incidentTime).toISOString();
    const response=await fetch(`${api.replace(/\/$/,"")}/v1/cases`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
@@ -105,7 +108,7 @@ function Intake({onBack,onReal,onDemo}:{onBack:()=>void;onReal:(data:RealRespons
    onReal(payload as RealResponse);
   }catch(reason){setError(reason instanceof Error?reason.message:"Investigation failed")}finally{setLoading(false)}
  }
- return <main className="intake page"><nav><Brand/><button className="linkBtn" onClick={onBack}>← Back</button></nav><div className="formWrap"><div className="eyebrow">OPEN A REAL CASE</div><h2>Start an investigation</h2><p>Start with the affected wallet. If you know the theft transaction, add it for the fastest path. Otherwise NEMESIS will search indexed wallet history for deterministic incident candidates before tracing.</p><div className="fields"><label>Wallet address<input value={wallet} onChange={e=>setWallet(e.target.value)} placeholder="0x…"/></label><label>Chain<select value={chain} onChange={e=>setChain(e.target.value)}><option value="ethereum">Ethereum</option><option value="base">Base</option></select></label><label className="wide">Theft transaction hash <span style={{opacity:.6}}>(optional)</span><input value={hash} onChange={e=>setHash(e.target.value)} placeholder="0x… if known"/></label><label className="wide">Approximate incident time <span style={{opacity:.6}}>(optional)</span><input type="datetime-local" value={incidentTime} onChange={e=>setIncidentTime(e.target.value)}/></label></div><div className="evidenceNote"><span>◆</span><p><strong>Evidence first</strong>{cleanHash?" RPC evidence is retrieved directly for the transaction you supplied.":" Bitquery finds deterministic wallet-history candidates; GoPlus and Chainabuse can enrich risk signals; RPC evidence still verifies the selected transaction before Gemini receives it."}</p></div>{error&&<div className="formError">{error}</div>}<button className="primary submit" disabled={loading||wallet.trim().length!==42||!hashValid} onClick={submit}>{loading?(cleanHash?"Investigating onchain evidence…":"Discovering likely theft activity…"):(cleanHash?"Create case & begin investigation":"Discover incident & begin investigation")} <span>↗</span></button><button className="demoButton" onClick={onDemo}>Run deterministic demo instead</button></div></main>
+ return <main className="intake page"><nav><Brand/><button className="linkBtn" onClick={onBack}>← Back</button></nav><div className="formWrap"><div className="eyebrow">OPEN A REAL CASE</div><h2>Start an investigation</h2><p>Start with the affected wallet. If you know the theft transaction, add it for the fastest path. Otherwise NEMESIS will search indexed wallet history for deterministic incident candidates before tracing.</p><div className="fields"><label>Wallet address<input value={wallet} onChange={e=>setWallet(e.target.value)} onBlur={()=>{setWalletTouched(true);setWallet(value=>value.trim())}} aria-invalid={Boolean((walletTouched||wallet)&&walletError)} aria-describedby="wallet-error" placeholder="0x…"/>{(walletTouched||wallet)&&walletError&&<small id="wallet-error" className="fieldError" role="alert">{walletError}</small>}</label><label>Chain<select value={chain} onChange={e=>setChain(e.target.value)}><option value="ethereum">Ethereum</option><option value="base">Base</option></select></label><label className="wide">Theft transaction hash <span style={{opacity:.6}}>(optional)</span><input value={hash} onChange={e=>setHash(e.target.value)} onBlur={()=>{setHashTouched(true);setHash(value=>value.trim())}} aria-invalid={Boolean((hashTouched||hash)&&hashError)} aria-describedby="hash-error" placeholder="0x… if known"/>{(hashTouched||hash)&&hashError&&<small id="hash-error" className="fieldError" role="alert">{hashError}</small>}</label><label className="wide">Approximate incident time <span style={{opacity:.6}}>(optional)</span><input type="datetime-local" value={incidentTime} onChange={e=>setIncidentTime(e.target.value)}/></label></div><div className="evidenceNote"><span>◆</span><p><strong>Evidence first</strong>{cleanHash?" RPC evidence is retrieved directly for the transaction you supplied.":" Bitquery finds deterministic wallet-history candidates; GoPlus and Chainabuse can enrich risk signals; RPC evidence still verifies the selected transaction before Gemini receives it."}</p></div>{error&&<div className="formError">{error}</div>}<button className="primary submit" disabled={!canSubmit} onClick={submit}>{loading?(cleanHash?"Investigating onchain evidence…":"Discovering likely theft activity…"):(cleanHash?"Create case & begin investigation":"Discover incident & begin investigation")} <span>↗</span></button><button className="demoButton" onClick={onDemo}>Run deterministic demo instead</button></div></main>
 }
 
 function Shell({children,onExit,onHome,monitor=false}:{children:(section:CaseSection)=>React.ReactNode;onExit:()=>void;onHome:()=>void;monitor?:boolean}){
