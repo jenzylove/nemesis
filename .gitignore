@@ -58,3 +58,6 @@ by2.json
 waz*.json
 trace.json
 ev.json
+
+# Local runtime scratch
+.sites-runtime/
