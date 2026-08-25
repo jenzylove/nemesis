@@ -5,11 +5,14 @@
 /* A real trace is far larger than the illustrative four-node case. Nodes get a
    row each and the panel scrolls, because overlapping markers hide the branch
    fan-out this view exists to show. */
-.graphScroll{max-height:min(70vh,560px);overflow-y:auto;overflow-x:hidden;position:relative}
+/* Hops are laid out across the width. On a narrow screen nine of them cannot
+   share 390px without the markers colliding, so the graph keeps the width it
+   needs and scrolls inside its own panel rather than the page. */
+.graphScroll{max-height:min(70vh,560px);overflow:auto;position:relative;overscroll-behavior:contain}
 /* The base rule pins .realGraph to an automatic height with !important, which
    collapses the absolutely positioned trace nodes into a pile. A custom
    property carries the computed height so this rule can win on specificity. */
-.graphScroll .realGraph{height:var(--graph-h)!important;min-height:var(--graph-h)!important}
+.graphScroll .realGraph{height:var(--graph-h)!important;min-height:var(--graph-h)!important;width:var(--graph-w);min-width:100%}
 .graphCompact .node{width:66px;height:34px;min-height:0;padding:4px;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;justify-content:center}
 .graphCompact .node span{font-size:6.5px;letter-spacing:.02em}
 .graphCompact .node small{font-size:6px}
@@ -28,3 +31,4 @@
 .stageBar i{display:block;height:100%;background:#5973d9;border-radius:3px;transition:width .5s ease}
 .stageTrack small{font:500 11px/1.4 Inter,Arial,sans-serif;color:#667085}
 .stageTrack .stageNote{opacity:.72}
+@media(max-width:560px){.graphCompact .node{width:58px;height:32px}}
