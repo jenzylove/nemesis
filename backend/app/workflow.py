@@ -185,8 +185,15 @@ class CaseWorkflow:
                 case.finding = await self.classifier.classify(case.id, evidence)
                 case.finding.compromise_mechanism_confidence = case.finding.confidence
                 runtime = "google_adk_gemini"
-            except (RuntimeError, ValueError) as exc:
-                case.error = str(exc)
+            except (RuntimeError, ValueError):
+                # Deterministic evidence and tracing already stand on their own.
+                # A classifier failure degrades the case, it does not invalidate
+                # it, and the victim should not be shown runtime internals.
+                case.error = (
+                    "NEMESIS could not produce a verified assessment of the compromise "
+                    "mechanism for this incident. The deterministic onchain evidence and "
+                    "fund tracing below are unaffected."
+                )
                 runtime = "unavailable"
 
             if self.taskmaster:

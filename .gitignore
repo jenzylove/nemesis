@@ -45,3 +45,16 @@ next-env.d.ts
 **/__pycache__/
 *.pyc
 .pytest_cache/
+
+# Local audit and verification artifacts (may contain identity tokens)
+idtoken.txt
+tok*.json
+d2.json
+del.json
+adel.json
+caseid.txt
+bybit.json
+by2.json
+waz*.json
+trace.json
+ev.json

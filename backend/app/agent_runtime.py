@@ -70,7 +70,12 @@ def validate_agent_finding(finding: AgentFinding, evidence: DeterministicEvidenc
     returned = {v.lower() for v in re.findall(r"0x[a-fA-F0-9]{8,}", combined)}
     if returned - supplied:
         raise ValueError("agent returned a blockchain identifier absent from deterministic evidence")
-    semantic_terms=("exchange","market maker","bridge","mixer","protocol","entity","service","contract","reactor")
+    # These terms assert *who* controls an address, which deterministic evidence
+    # cannot establish on its own. Generic onchain vocabulary ("contract",
+    # "protocol") describes mechanics rather than ownership and is allowed:
+    # actual entity naming is already blocked by the named-entity check below,
+    # which rejects any proper noun absent from the evidence.
+    semantic_terms=("exchange","market maker","bridge","mixer","entity","service","reactor")
     deterministic=json.dumps(evidence.model_dump(mode="json")).lower()
     unsupported=[]
     for term in semantic_terms:
@@ -80,8 +85,15 @@ def validate_agent_finding(finding: AgentFinding, evidence: DeterministicEvidenc
             if re.search(rf"\b(?:no|not|unknown|unidentified|cannot confirm|insufficient evidence).{{0,40}}\b{re.escape(term)}\b",sentence):
                 continue
             unsupported.append(term);break
-    allowed_technical_names={"ERC20"}
+    allowed_technical_names={"ERC20","ERC721","NEMESIS","RPC","JSON","EVM","NFT"}
     named=set(re.findall(r"\b[A-Z][A-Za-z0-9]*(?:[A-Z][A-Za-z0-9]*|[0-9][A-Za-z0-9]*)\b",combined))
+    # Plain proper nouns such as "Tornado" or "Binance" are attribution too.
+    # Only the sentence-initial word is exempt, since capitalisation there is
+    # grammar rather than a claim about who controls an address.
+    for _sentence in re.split(r"(?<=[.!?])\s+", combined):
+        for _token in re.findall(r"\b[A-Za-z][A-Za-z0-9]*\b", _sentence)[1:]:
+            if _token[0].isupper():
+                named.add(_token)
     unsupported_names=sorted(name for name in named-allowed_technical_names if name.lower() not in deterministic)
     if unsupported_names:
         raise ValueError("agent returned unsupported named entity attribution: "+", ".join(unsupported_names))
