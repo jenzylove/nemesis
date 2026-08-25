@@ -13,7 +13,7 @@ from .providers import JsonRpcProvider, RpcProviderError
 # How many indexed candidates may be RPC-verified for a single hop. Verification
 # costs two RPC calls each, so this is deliberately small and is applied only
 # after candidates have been ordered by whether they can carry the tracked asset.
-MOVEMENT_CANDIDATE_LIMIT = 6
+MOVEMENT_CANDIDATE_LIMIT = 4
 
 NATIVE_CATEGORIES = frozenset({"external", "internal"})
 TOKEN_CATEGORIES = frozenset({"erc20", "erc721", "erc1155"})
@@ -45,6 +45,17 @@ def prefer_asset_categories(candidates: list[dict], asset: str | None) -> list[d
 
 class MovementDetectionError(RuntimeError):
     pass
+
+
+class VerificationUnavailableError(MovementDetectionError):
+    """The chain could not be reached to verify candidates.
+
+    Distinct from a detector failing. When a detector is unavailable it is worth
+    trying another source, but when the chain itself is throttling there is
+    nothing to fall back to: the fallback path is more RPC traffic, which makes
+    the throttling worse. This propagates instead so the caller can record a
+    retrieval failure.
+    """
 
 
 class AlchemyHistoricalMovementDetector:
@@ -312,7 +323,7 @@ class HybridMovementProvider:
                 # Throttling is not evidence. Swallowing it here would drop real
                 # candidates and make a rate-limited provider look like an
                 # address that stopped moving funds.
-                raise MovementDetectionError("candidate verification could not reach the chain") from exc
+                raise VerificationUnavailableError("candidate verification could not reach the chain") from exc
             verified_by = "json_rpc"
             if not self._is_verified_outgoing(tx, address):  # noqa: SIM102
                 # The receipt shows no outgoing value, which is also what a
@@ -350,6 +361,8 @@ class HybridMovementProvider:
                 if verified:
                     return verified[0]["block_number"], verified
                 return latest, []
+            except VerificationUnavailableError:
+                raise
             except MovementDetectionError:
                 pass
 
@@ -361,6 +374,8 @@ class HybridMovementProvider:
                 if verified:
                     return verified[0]["block_number"], verified
                 return latest, []
+            except VerificationUnavailableError:
+                raise
             except MovementDetectionError:
                 pass
 

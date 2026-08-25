@@ -280,3 +280,17 @@ async def test_prioritisation_never_discards_unclassified_candidates():
     _, repo = await native_trace(rpc)
     landed = [b for b in await repo.list_branches(case_id="NMS-C") if b.current_address == B]
     assert landed and int(landed[0].amount) == 100
+
+
+@pytest.mark.asyncio
+async def test_unreachable_chain_does_not_mark_a_branch_dormant():
+    """Throttling must not be recorded as an address that stopped moving."""
+    class Broken(Rpc):
+        async def get_address_movements(self, chain, address, after_block, max_blocks=20, asset=None):
+            raise MovementDetectionError("candidate verification could not reach the chain")
+
+    rpc = Broken(transactions={}, movements={})
+    _, repo = await native_trace(rpc)
+    branch = [b for b in await repo.list_branches(case_id="NMS-C") if b.current_address == A][0]
+    assert branch.status == "OBSCURED"
+    assert branch.terminal_reason == "CONTINUATION_EVIDENCE_UNAVAILABLE"

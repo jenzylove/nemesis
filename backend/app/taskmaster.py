@@ -127,7 +127,14 @@ class Taskmaster:
             if a and a.actionable:await self._actionable(b,a);continue
             if b.depth>=self.max_depth:
                 b.status="OBSCURED";b.terminal_reason="MAX_DEPTH";await self.repo.save_branch(b);await self._timeline(b.case_id,"MAX_DEPTH_REACHED","Configured trace depth reached",{"branch_id":b.id,"depth":b.depth,"max_depth":self.max_depth});continue
-            cursor,moves=await self.provider.get_address_movements(b.chain,b.current_address,b.cursor_block,self.max_blocks,asset=b.asset);b.cursor_block=cursor;b.last_checked=datetime.now(timezone.utc);out=[m for m in moves if m.get("direction")=="out"]
+            try:
+                cursor,moves=await self.provider.get_address_movements(b.chain,b.current_address,b.cursor_block,self.max_blocks,asset=b.asset)
+            except Exception:
+                # The chain could not be reached. That is not evidence the funds
+                # stopped moving, so the branch is not reported dormant, and the
+                # rest of the case still completes on its own evidence.
+                await self._unavailable(b);continue
+            b.cursor_block=cursor;b.last_checked=datetime.now(timezone.utc);out=[m for m in moves if m.get("direction")=="out"]
             if not out:await self._dormant(b);continue
             q.extend(await self._follow(b,out))
     def _prioritise(self,b,out,hashes):
@@ -278,6 +285,11 @@ class Taskmaster:
         b.attribution=a;await self.repo.save_branch(b);await self._timeline(b.case_id,"ENTITY_ATTRIBUTION_DETECTED","Deterministic entity attribution detected",{"branch_id":b.id,**a.model_dump(mode="json")});node=stable_id("NODE",b.case_id,a.chain,a.address);await self.repo.save_node(GraphNode(id=node,case_id=b.case_id,branch_id=b.id,kind="entity",label=a.entity_name,chain=a.chain,address=a.address,created_at=datetime.now(timezone.utc),provenance=[a.source,a.evidence_type],data=a.model_dump(mode="json")));return a
     async def _actionable(self,b,a):
         b.status="ACTIONABLE";b.terminal_reason="DETERMINISTIC_ACTIONABLE_ENTITY";b.attribution=a;await self.repo.save_branch(b);await self._timeline(b.case_id,"ACTIONABLE_DESTINATION_DETECTED","Actionable destination detected",{"branch_id":b.id,"address":b.current_address,"chain":b.chain,"entity_name":a.entity_name,"entity_type":a.entity_type,"source":a.source,"confidence":a.confidence,"evidence_type":a.evidence_type})
+    async def _unavailable(self,b):
+        """Record that evidence retrieval failed, which is not a finding."""
+        b.status="OBSCURED";b.terminal_reason="CONTINUATION_EVIDENCE_UNAVAILABLE";b.last_checked=datetime.now(timezone.utc)
+        await self.repo.save_branch(b)
+        await self._timeline(b.case_id,"CONTINUATION_EVIDENCE_UNAVAILABLE","Continuation evidence could not be retrieved",{"branch_id":b.id,"address":b.current_address})
     async def _dormant(self,b,reason="NO_OUTGOING_MOVEMENT_IN_SCAN_WINDOW"):
         b.status="DORMANT";b.terminal_reason=reason;b.last_checked=datetime.now(timezone.utc);await self.repo.save_branch(b);await self._timeline(b.case_id,"BRANCH_DORMANT","Dormant wallet detected",{"branch_id":b.id,"address":b.current_address,"reason":reason});await self._timeline(b.case_id,"MONITORING_ACTIVE","Monitoring active",{"branch_id":b.id})
     async def _transfer_graph(self,b,source,dest,tx,ref,kind):
