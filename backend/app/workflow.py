@@ -1,11 +1,35 @@
 from datetime import datetime, timezone
 import uuid
 
+from .discovery import DiscoveryProviderError, DiscoveryUnavailableError
 from .incident_selection import rank_verified_candidates, wallet_outflow
 from .models import CaseCreate, CaseResponse, DeterministicEvidence, InvestigationCase
+from .movement import MovementDetectionError
+from .providers import RpcProviderError
 
 
 SUPPORTED_CHAINS = ("ethereum", "base")
+
+# Failures that mean "NEMESIS could not retrieve evidence", never "the evidence
+# says nothing happened". Collapsing the two would let an outage masquerade as a
+# forensic finding, which is the one thing this product must not do.
+EVIDENCE_RETRIEVAL_ERRORS = (
+    DiscoveryProviderError,
+    DiscoveryUnavailableError,
+    RpcProviderError,
+    MovementDetectionError,
+    TimeoutError,
+)
+
+EVIDENCE_RETRIEVAL_MESSAGE = (
+    "NEMESIS could not reach the onchain data sources needed to verify this wallet, "
+    "so no conclusion has been drawn about it. Nothing here means the wallet is safe "
+    "or that no incident occurred. Please try again shortly."
+)
+
+
+def is_evidence_retrieval_failure(error: BaseException) -> bool:
+    return isinstance(error, EVIDENCE_RETRIEVAL_ERRORS)
 
 
 class CaseWorkflow:
@@ -31,6 +55,7 @@ class CaseWorkflow:
 
         resolved = []
         failures = []
+        retrieval_failures = []
         for chain in SUPPORTED_CHAINS:
             try:
                 discovery = await self.discovery.discover(chain, wallet, incident_time)
@@ -38,11 +63,19 @@ class CaseWorkflow:
                 resolved.append((discovery.selected_score or 0, chain, discovery, transaction))
             except Exception as exc:
                 failures.append(f"{chain}: {exc}")
+                if is_evidence_retrieval_failure(exc):
+                    retrieval_failures.append(f"{chain}: {exc}")
 
         if not resolved:
-            detail = "; ".join(failures) if failures else "no supported chain returned a verified incident"
+            # If every chain failed and any of those failures was an outage, this
+            # is an infrastructure problem and must not be reported as an
+            # investigative result.
+            if retrieval_failures:
+                raise DiscoveryProviderError(EVIDENCE_RETRIEVAL_MESSAGE)
             raise ValueError(
-                f"no verified incident found on supported chains ({', '.join(SUPPORTED_CHAINS)}): {detail}"
+                "No verified incident was found for this wallet on the supported networks "
+                f"({', '.join(SUPPORTED_CHAINS)}). If you know the theft transaction hash, "
+                "adding it will let NEMESIS investigate it directly."
             )
 
         resolved.sort(key=lambda item: (item[3] is not None, item[0]), reverse=True)
@@ -50,17 +83,22 @@ class CaseWorkflow:
         return chain, discovery, transaction
 
     async def _resolve_supplied_hash_chain(self, tx_hash):
-        failures = []
+        retrieval_failures = []
         for chain in SUPPORTED_CHAINS:
             try:
                 transaction = await self.provider.get_normalized_transaction(chain, tx_hash)
                 if transaction.hash.lower() == tx_hash and transaction.status == "success":
                     return chain, transaction
+            except LookupError:
+                continue
             except Exception as exc:
-                failures.append(f"{chain}: {exc}")
-        detail = "; ".join(failures) if failures else "transaction was not resolved"
+                if is_evidence_retrieval_failure(exc):
+                    retrieval_failures.append(f"{chain}: {exc}")
+        if retrieval_failures:
+            raise DiscoveryProviderError(EVIDENCE_RETRIEVAL_MESSAGE)
         raise ValueError(
-            f"transaction hash was not found on supported chains ({', '.join(SUPPORTED_CHAINS)}): {detail}"
+            "That transaction hash was not found on the supported networks "
+            f"({', '.join(SUPPORTED_CHAINS)}). Please check the hash and try again."
         )
 
     async def create_and_investigate(self, request: CaseCreate, owner_user_id: str, owner_email: str | None = None) -> CaseResponse:
@@ -167,8 +205,9 @@ class CaseWorkflow:
             await self.repository.save(case)
             return CaseResponse(case=case, factual_source="json_rpc", agent_runtime=runtime)
         except Exception as exc:
-            case.state = "FAILED"
-            case.error = str(exc)
+            retrieval_failure = is_evidence_retrieval_failure(exc)
+            case.state = "EVIDENCE_RETRIEVAL_FAILED" if retrieval_failure else "FAILED"
+            case.error = EVIDENCE_RETRIEVAL_MESSAGE if retrieval_failure else str(exc)
             case.updated_at = datetime.now(timezone.utc)
             if case.evidence is not None:
                 await self.repository.save(case)
