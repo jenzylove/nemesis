@@ -57,7 +57,7 @@ class Rpc(JsonRpcProvider):
     async def get_normalized_transaction(self, chain, tx_hash):
         return self.transactions[chain, tx_hash].model_copy(deep=True)
 
-    async def get_address_movements(self, chain, address, after_block, max_blocks=20):
+    async def get_address_movements(self, chain, address, after_block, max_blocks=20, asset=None):
         rows = [m for m in self.movements.get((chain, address.lower()), []) if m["block_number"] > after_block]
         return (max([after_block + 1, *[m["block_number"] for m in rows]]), rows)
 

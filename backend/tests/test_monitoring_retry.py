@@ -14,7 +14,7 @@ class FailOnceProvider:
     def __init__(self):
         self.calls = 0
 
-    async def get_address_movements(self, chain, address, after_block, max_blocks):
+    async def get_address_movements(self, chain, address, after_block, max_blocks, asset=None):
         self.calls += 1
         if self.calls == 1:
             raise RuntimeError("temporary provider failure")

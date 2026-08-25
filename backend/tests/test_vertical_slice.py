@@ -56,7 +56,7 @@ class FixtureRpc(JsonRpcProvider):
         if method == 'eth_getBlockByNumber':
             return {'timestamp': '0x65a0bc00'}
 
-    async def get_address_movements(self, chain, address, after_block, max_blocks=20):
+    async def get_address_movements(self, chain, address, after_block, max_blocks=20, asset=None):
         return (after_block, [])
 
 class FixtureClassifier(InvestigationClassifier):
@@ -189,7 +189,7 @@ class QueuePublisher(EventPublisher):
 
 class MovementRpc(FixtureRpc):
 
-    async def get_address_movements(self, chain, address, after_block, max_blocks=20):
+    async def get_address_movements(self, chain, address, after_block, max_blocks=20, asset=None):
         return (after_block + 1, [{'transaction_hash': TX_HASH, 'block_number': after_block + 1, 'kind': 'erc20', 'direction': 'out'}])
 
 class AutonomousRpc(FixtureRpc):
@@ -199,7 +199,7 @@ class AutonomousRpc(FixtureRpc):
         self.movement = False
         self.resume_hash = '0x' + 'cd' * 32
 
-    async def get_address_movements(self, chain, address, after_block, max_blocks=20):
+    async def get_address_movements(self, chain, address, after_block, max_blocks=20, asset=None):
         return (after_block + 1, [{'transaction_hash': self.resume_hash, 'block_number': after_block + 1, 'kind': 'erc20', 'direction': 'out'}]) if self.movement else (after_block + 1, [])
 
     async def get_normalized_transaction(self, chain, tx_hash):
@@ -281,7 +281,7 @@ class TableRpc(JsonRpcProvider):
     async def get_normalized_transaction(self, chain, tx_hash):
         return self.transactions[chain, tx_hash]
 
-    async def get_address_movements(self, chain, address, after_block, max_blocks=20):
+    async def get_address_movements(self, chain, address, after_block, max_blocks=20, asset=None):
         candidates = [m for m in self.movements.get((chain, address.lower()), []) if m['block_number'] > after_block]
         cursor = max([after_block + 1, *[m['block_number'] for m in candidates]])
         return (cursor, candidates)

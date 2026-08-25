@@ -55,7 +55,7 @@ class RpcStub:
         assert tx_hash == TX
         return self.tx
 
-    async def get_address_movements(self, chain, address, after_block, max_blocks=20):
+    async def get_address_movements(self, chain, address, after_block, max_blocks=20, asset=None):
         self.fallback_calls += 1
         return after_block + max_blocks, []
 
@@ -161,3 +161,47 @@ async def test_hybrid_uses_bitquery_near_head_and_rpc_rejects_false_signal():
     assert cursor == 2000
     assert moves == []
     assert rpc.fallback_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_throttled_verification_is_not_reported_as_no_movement():
+    """A rate-limited provider must not look like an address that stopped moving."""
+    from app.movement import MovementDetectionError
+    from app.providers import RpcProviderError
+
+    class Historical:
+        async def find_next(self, chain, address, after_block):
+            return [{"transaction_hash": TX, "block_number": 1500, "direction": "out", "categories": ["external"]}]
+
+    class ThrottledRpc(RpcStub):
+        async def get_normalized_transaction(self, chain, tx_hash):
+            raise RpcProviderError("upstream throttled or unavailable (429)")
+
+    rpc = ThrottledRpc(latest=5000)
+    provider = HybridMovementProvider(rpc, historical=Historical(), realtime=None, realtime_lag_blocks=256)
+    with pytest.raises(MovementDetectionError):
+        await provider._verify("ethereum", ADDRESS, [
+            {"transaction_hash": TX, "block_number": 1500, "direction": "out"}])
+
+
+def test_candidates_that_can_carry_the_asset_are_verified_first():
+    """Verification budget must not be spent on traffic that cannot match."""
+    from app.movement import prefer_asset_categories
+
+    spam = {"transaction_hash": "0x1", "block_number": 1, "categories": ["erc20"]}
+    unknown = {"transaction_hash": "0x2", "block_number": 2, "categories": []}
+    native = {"transaction_hash": "0x3", "block_number": 3, "categories": ["external"]}
+
+    ordered = prefer_asset_categories([spam, unknown, native], "native")
+    assert [c["transaction_hash"] for c in ordered] == ["0x3", "0x2", "0x1"]
+    # nothing is discarded, ordering is only a preference
+    assert len(ordered) == 3
+
+    token = prefer_asset_categories([spam, unknown, native], "0x" + "dd" * 20)
+    assert token[0]["transaction_hash"] == "0x1"
+
+
+def test_asset_hint_absent_preserves_original_order():
+    from app.movement import prefer_asset_categories
+    rows = [{"transaction_hash": "0x1", "block_number": 1, "categories": ["erc20"]}]
+    assert prefer_asset_categories(rows, None) == rows

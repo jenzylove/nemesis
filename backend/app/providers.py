@@ -19,7 +19,8 @@ class BlockchainProvider(ABC):
 
     @abstractmethod
     async def get_address_movements(
-        self, chain: ChainName, address: str, after_block: int, max_blocks: int = 20
+        self, chain: ChainName, address: str, after_block: int, max_blocks: int = 20,
+        asset: str | None = None,
     ) -> tuple[int, list[dict]]:
         raise NotImplementedError
 
@@ -175,7 +176,8 @@ class JsonRpcProvider(BlockchainProvider):
         )
 
     async def get_address_movements(
-        self, chain: ChainName, address: str, after_block: int, max_blocks: int = 20
+        self, chain: ChainName, address: str, after_block: int, max_blocks: int = 20,
+        asset: str | None = None,
     ) -> tuple[int, list[dict]]:
         latest = _hex_int(await self._call(chain, "eth_blockNumber", []))
         end = min(latest, after_block + max_blocks)

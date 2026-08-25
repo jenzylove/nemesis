@@ -10,9 +10,37 @@ from .models import ChainName, NativeTransfer, NormalizedTransaction
 from .providers import JsonRpcProvider, RpcProviderError
 
 
-# How many indexed candidates may be RPC-verified for a single hop. Bounded so a
-# noisy address cannot consume provider budget.
-MOVEMENT_CANDIDATE_LIMIT = 25
+# How many indexed candidates may be RPC-verified for a single hop. Verification
+# costs two RPC calls each, so this is deliberately small and is applied only
+# after candidates have been ordered by whether they can carry the tracked asset.
+MOVEMENT_CANDIDATE_LIMIT = 6
+
+NATIVE_CATEGORIES = frozenset({"external", "internal"})
+TOKEN_CATEGORIES = frozenset({"erc20", "erc721", "erc1155"})
+
+
+def prefer_asset_categories(candidates: list[dict], asset: str | None) -> list[dict]:
+    """Order candidates so those able to carry `asset` are verified first.
+
+    A drained address emits a lot of traffic that cannot possibly move the asset
+    being followed, including address-poisoning spam that mimics real token
+    symbols. Verifying in pure block order spent the RPC budget on that noise
+    before the real transfer was ever reached.
+
+    This is a preference, not a filter. Candidates whose category is unknown keep
+    their place ahead of ones known to be irrelevant, and nothing is discarded.
+    """
+    if not asset:
+        return candidates
+    wanted = NATIVE_CATEGORIES if asset == "native" else TOKEN_CATEGORIES
+
+    def rank(candidate: dict) -> int:
+        known = {str(c).lower() for c in (candidate.get("categories") or []) if c}
+        if not known:
+            return 1
+        return 0 if known & wanted else 2
+
+    return sorted(candidates, key=lambda c: (rank(c), c.get("block_number") or 0))
 
 
 class MovementDetectionError(RuntimeError):
@@ -277,10 +305,16 @@ class HybridMovementProvider:
         for candidate in candidates:
             try:
                 tx = await self.rpc.get_normalized_transaction(chain, candidate["transaction_hash"])
-            except (LookupError, RpcProviderError):
+            except LookupError:
+                # The chain genuinely does not have it. That is evidence.
                 continue
+            except RpcProviderError as exc:
+                # Throttling is not evidence. Swallowing it here would drop real
+                # candidates and make a rate-limited provider look like an
+                # address that stopped moving funds.
+                raise MovementDetectionError("candidate verification could not reach the chain") from exc
             verified_by = "json_rpc"
-            if not self._is_verified_outgoing(tx, address):
+            if not self._is_verified_outgoing(tx, address):  # noqa: SIM102
                 # The receipt shows no outgoing value, which is also what a
                 # contract-forwarded internal transfer looks like. Consult the
                 # index before concluding the address did not move funds.
@@ -295,19 +329,24 @@ class HybridMovementProvider:
         return sorted(verified, key=lambda item: (item["block_number"], item["transaction_hash"]))
 
     async def get_address_movements(
-        self, chain: ChainName, address: str, after_block: int, max_blocks: int = 20
+        self, chain: ChainName, address: str, after_block: int, max_blocks: int = 20,
+        asset: str | None = None,
     ) -> tuple[int, list[dict]]:
         latest = await self._latest(chain)
         lag = max(0, latest - after_block)
 
-        # Several verified candidates are returned, not just the earliest. Only
-        # some of an address's outgoing transactions carry the asset a branch is
-        # following, so the trace engine needs the choice. The cursor still
-        # advances to the earliest of them, so nothing is skipped.
+        # Several verified candidates are returned, not just the earliest, since
+        # only some of an address's outgoing transactions carry the asset a
+        # branch is following. Candidates are ordered by whether they can carry
+        # that asset *before* being verified, because verification costs RPC
+        # calls and the noise would otherwise consume the budget. The cursor
+        # still advances to the earliest verified candidate, so nothing is
+        # skipped.
         if lag > self.realtime_lag_blocks and self.historical:
             try:
                 historical = await self.historical.find_next(chain, address, after_block)
-                verified = await self._verify(chain, address, historical[:MOVEMENT_CANDIDATE_LIMIT])
+                ordered = prefer_asset_categories(historical, asset)
+                verified = await self._verify(chain, address, ordered[:MOVEMENT_CANDIDATE_LIMIT])
                 if verified:
                     return verified[0]["block_number"], verified
                 return latest, []
@@ -317,7 +356,8 @@ class HybridMovementProvider:
         if self.realtime:
             try:
                 realtime = await self.realtime.find_outgoing(chain, address, after_block)
-                verified = await self._verify(chain, address, realtime[:MOVEMENT_CANDIDATE_LIMIT])
+                ordered = prefer_asset_categories(realtime, asset)
+                verified = await self._verify(chain, address, ordered[:MOVEMENT_CANDIDATE_LIMIT])
                 if verified:
                     return verified[0]["block_number"], verified
                 return latest, []

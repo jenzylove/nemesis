@@ -109,7 +109,7 @@ class Taskmaster:
     async def recheck(self,bid):
         b=await self.repo.get_branch(bid)
         if not b or b.status!="DORMANT":return {"ignored":True}
-        cursor,moves=await self.provider.get_address_movements(b.chain,b.current_address,b.cursor_block,self.max_blocks);b.cursor_block=cursor;b.last_checked=datetime.now(timezone.utc);out=[m for m in moves if m.get("direction")=="out"]
+        cursor,moves=await self.provider.get_address_movements(b.chain,b.current_address,b.cursor_block,self.max_blocks,asset=b.asset);b.cursor_block=cursor;b.last_checked=datetime.now(timezone.utc);out=[m for m in moves if m.get("direction")=="out"]
         if not out:await self.repo.save_branch(b);return {"movement":False}
         m=out[0];b.status="MOVING";b.terminal_reason=None;b.last_transaction=m["transaction_hash"];await self.repo.save_branch(b);await self._timeline(b.case_id,"MOVEMENT_DETECTED","Movement detected",{"branch_id":b.id,**m});await self.publisher.publish({"id":stable_id("EV","trace",b.id,m["transaction_hash"]),"type":"TRACE_REQUESTED","branch_id":b.id,"transaction_hash":m["transaction_hash"]});return {"movement":True,"transaction_hash":m["transaction_hash"]}
     async def resume(self,bid,tx_hash):
@@ -127,7 +127,7 @@ class Taskmaster:
             if a and a.actionable:await self._actionable(b,a);continue
             if b.depth>=self.max_depth:
                 b.status="OBSCURED";b.terminal_reason="MAX_DEPTH";await self.repo.save_branch(b);await self._timeline(b.case_id,"MAX_DEPTH_REACHED","Configured trace depth reached",{"branch_id":b.id,"depth":b.depth,"max_depth":self.max_depth});continue
-            cursor,moves=await self.provider.get_address_movements(b.chain,b.current_address,b.cursor_block,self.max_blocks);b.cursor_block=cursor;b.last_checked=datetime.now(timezone.utc);out=[m for m in moves if m.get("direction")=="out"]
+            cursor,moves=await self.provider.get_address_movements(b.chain,b.current_address,b.cursor_block,self.max_blocks,asset=b.asset);b.cursor_block=cursor;b.last_checked=datetime.now(timezone.utc);out=[m for m in moves if m.get("direction")=="out"]
             if not out:await self._dormant(b);continue
             q.extend(await self._follow(b,out))
     def _prioritise(self,b,out,hashes):
