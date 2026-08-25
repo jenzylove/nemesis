@@ -1,0 +1,11 @@
+# Cloud Build uploads the working tree, not the git index, so a Windows
+# checkout previously shipped CRLF shell scripts and broke `set -o pipefail`
+# inside the Linux build image. Normalise line endings for everything that
+# runs in a container.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.jpg binary
+*.woff binary
+*.woff2 binary
