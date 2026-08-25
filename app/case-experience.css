@@ -8,7 +8,11 @@
 /* Hops are laid out across the width. On a narrow screen nine of them cannot
    share 390px without the markers colliding, so the graph keeps the width it
    needs and scrolls inside its own panel rather than the page. */
-.graphScroll{max-height:min(70vh,560px);overflow:auto;position:relative;overscroll-behavior:contain}
+.graphScroll{max-height:min(70vh,560px);overflow:auto;position:relative;overscroll-behavior:contain;max-width:100%}
+/* A grid child defaults to min-width:auto, so the wide graph pushed the page
+   sideways instead of scrolling inside its own panel. */
+.graphPanel,.workspace>.panel{min-width:0}
+.workspace{min-width:0}
 /* The base rule pins .realGraph to an automatic height with !important, which
    collapses the absolutely positioned trace nodes into a pile. A custom
    property carries the computed height so this rule can win on specificity. */
