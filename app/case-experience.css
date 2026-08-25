@@ -7,7 +7,7 @@
    fan-out this view exists to show. */
 .graphScroll{max-height:min(70vh,560px);overflow-y:auto;overflow-x:hidden;position:relative}
 .graphScroll .realGraph{height:auto;min-height:0}
-.graphCompact .node{width:66px;min-height:0;padding:5px 4px;border-radius:5px}
+.graphCompact .node{width:66px;height:34px;min-height:0;padding:4px;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;justify-content:center}
 .graphCompact .node span{font-size:6.5px;letter-spacing:.02em}
 .graphCompact .node small{font-size:6px}
 .node.bridge{border-color:#5973d9}

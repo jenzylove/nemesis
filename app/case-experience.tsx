@@ -87,13 +87,6 @@ export default function CaseExperienceEnhancer(){
     if(detail)detail.textContent=detail.textContent?.replace("raw amount ","on-chain amount ")||"";
    });
 
-   const graphPanel=page.querySelector<HTMLElement>(".graphPanel");
-   if(graphPanel&&!graphPanel.querySelector(".graphExplanation")){
-    const note=document.createElement("div");
-    note.className="graphExplanation";
-    note.textContent="This graph is generated from the persisted trace state. Every visible node and edge represents a recorded fund path, not a decorative demo path.";
-    graphPanel.querySelector(".panelHead")?.insertAdjacentElement("afterend",note);
-   }
   };
 
   enhance();
