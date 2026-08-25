@@ -82,8 +82,8 @@ class GooglePubSubPublisher(EventPublisher):
         return self.client.publish(self.client.topic_path(self.project,self.topic),json.dumps(e).encode()).result(timeout=20)
 
 class Taskmaster:
-    def __init__(self,repo,provider,publisher,max_blocks=20,max_depth=8,attribution_provider=None):
-        self.repo,self.provider,self.publisher,self.max_blocks,self.max_depth=repo,provider,publisher,max_blocks,max_depth;self.attribution_provider=attribution_provider or CuratedAttributionProvider();self.monitoring_gate=asyncio.Semaphore(2)
+    def __init__(self,repo,provider,publisher,max_blocks=20,max_depth=8,attribution_provider=None,max_candidates_per_hop=5):
+        self.repo,self.provider,self.publisher,self.max_blocks,self.max_depth=repo,provider,publisher,max_blocks,max_depth;self.max_candidates_per_hop=max(1,max_candidates_per_hop);self.attribution_provider=attribution_provider or CuratedAttributionProvider();self.monitoring_gate=asyncio.Semaphore(2)
     async def trace_initial(self,case_id,evidence:DeterministicEvidence):
         tx=evidence.transaction;wallet=evidence.submitted_wallet.lower();await self._timeline(case_id,"TRACING_FUNDS","Tracing funds",{"transaction_hash":tx.hash});branches=[];now=datetime.now(timezone.utc)
         for i,p in enumerate(self._paths(tx,wallet,None,None)):
@@ -129,8 +129,38 @@ class Taskmaster:
                 b.status="OBSCURED";b.terminal_reason="MAX_DEPTH";await self.repo.save_branch(b);await self._timeline(b.case_id,"MAX_DEPTH_REACHED","Configured trace depth reached",{"branch_id":b.id,"depth":b.depth,"max_depth":self.max_depth});continue
             cursor,moves=await self.provider.get_address_movements(b.chain,b.current_address,b.cursor_block,self.max_blocks);b.cursor_block=cursor;b.last_checked=datetime.now(timezone.utc);out=[m for m in moves if m.get("direction")=="out"]
             if not out:await self._dormant(b);continue
-            m=out[0];b.last_transaction=m["transaction_hash"];await self.repo.save_branch(b);await self._timeline(b.case_id,"MOVEMENT_DETECTED","Movement detected",{"branch_id":b.id,**m});r=await self._process(b,m["transaction_hash"]);q.extend(r["branches"])
-    async def _process(self,b,tx_hash):
+            q.extend(await self._follow(b,out))
+    async def _follow(self,b,out):
+        """Advance the branch on the first outgoing transaction that moves it.
+
+        An address commonly emits several outgoing transactions, and only some
+        of them touch the asset this branch is tracking. Reading just the first
+        one made a branch look dormant whenever an unrelated transfer happened
+        to come first. Candidates are therefore tried in order until one
+        actually accounts for tracked value.
+
+        Advancing is only permitted when the previous candidate consumed
+        nothing, so the same funds can never be followed down two paths. That
+        is the double-counting failure an earlier parallel-path attempt
+        introduced, and it stays impossible here by construction.
+        """
+        seen=[]
+        for m in out:
+            h=m.get("transaction_hash")
+            if h and h not in seen:seen.append(h)
+            if len(seen)>=self.max_candidates_per_hop:break
+        for index,tx_hash in enumerate(seen):
+            b.last_transaction=tx_hash
+            await self.repo.save_branch(b)
+            await self._timeline(b.case_id,"MOVEMENT_DETECTED","Movement detected",{"branch_id":b.id,**next((x for x in out if x.get("transaction_hash")==tx_hash),{"transaction_hash":tx_hash})})
+            last=index==len(seen)-1
+            r=await self._process(b,tx_hash,terminal=last)
+            if r["extended"] or int(r.get("consumed") or 0)>0:
+                return r["branches"]
+            if r.get("halted"):
+                return r["branches"]
+        return []
+    async def _process(self,b,tx_hash,terminal=True):
         tx=await self.provider.get_normalized_transaction(b.chain,tx_hash);source=b.current_address.lower();b.cursor_block=max(b.cursor_block,tx.block_number);b.last_transaction=tx.hash;b.last_checked=datetime.now(timezone.utc)
         bridge=await self.provider.get_bridge_evidence(b.chain,tx,source,b.asset,b.amount)
         if bridge:return await self._bridge(b,tx,bridge)
@@ -148,7 +178,7 @@ class Taskmaster:
                 b.status="OBSCURED";b.terminal_reason="CONTINUATION_EVIDENCE_UNAVAILABLE";b.last_checked=datetime.now(timezone.utc)
                 await self.repo.save_branch(b)
                 await self._timeline(b.case_id,"CONTINUATION_EVIDENCE_UNAVAILABLE","Continuation evidence could not be retrieved",{"branch_id":b.id,"address":source,"transaction_hash":tx.hash})
-                return {"extended":False,"path_count":0,"branches":[]}
+                return {"extended":False,"path_count":0,"branches":[],"consumed":0,"halted":True}
             fresh=[t for t in indexed if not any(
                 e.from_address==t.from_address and e.to_address==t.to_address and e.raw_amount==t.raw_amount
                 for e in tx.native_transfers)]
@@ -156,8 +186,10 @@ class Taskmaster:
                 tx.native_transfers.extend(fresh)
                 await self._timeline(b.case_id,"INDEXED_CONTINUATION_RESOLVED","Indexed evidence revealed native movement the receipt does not encode",{"branch_id":b.id,"transaction_hash":tx.hash,"transfer_count":len(fresh),"evidence_provenance":sorted({p for t in fresh for p in t.provenance})})
                 ps=self._paths(tx,source,b.asset,b.amount)
-        if not ps:await self._dormant(b,"NO_DETERMINISTIC_OUTGOING_PATH");return {"extended":False,"path_count":0,"branches":[]}
-        targets=await self._apply(b,tx,ps);return {"extended":True,"path_count":len(targets),"branches":targets}
+        if not ps:
+            if terminal:await self._dormant(b,"NO_DETERMINISTIC_OUTGOING_PATH")
+            return {"extended":False,"path_count":0,"branches":[],"consumed":0}
+        targets=await self._apply(b,tx,ps);return {"extended":True,"path_count":len(targets),"branches":targets,"consumed":sum(int(p["amount"]) for p in ps)}
     def _paths(self,tx,source,asset,amount):
         source=source.lower();c=[]
         if asset in (None,"native") and tx.from_address==source and tx.to_address and int(tx.native_value_wei)>0:c.append({"destination":tx.to_address.lower(),"asset":"native","amount":tx.native_value_wei,"ref":"transaction.native_value_wei","order":-1})
@@ -212,10 +244,10 @@ class Taskmaster:
         source=b.current_address.lower();b.amount=str(e["amount"]);now=datetime.now(timezone.utc);prov=list(e.get("provenance") or ["json_rpc",tx.hash]);await self._timeline(b.case_id,"BRIDGE_DETECTED","Bridge transfer detected",{"branch_id":b.id,**e});src=stable_id("NODE",b.case_id,b.chain,source);bridge=stable_id("NODE",b.case_id,"bridge",tx.hash,e["bridge_contract"]);txn=stable_id("NODE",b.case_id,"tx",b.chain,tx.hash);await self.repo.save_node(GraphNode(id=src,case_id=b.case_id,branch_id=b.id,kind="address",label="Wallet",chain=b.chain,address=source,created_at=now,provenance=["json_rpc",tx.hash]));await self.repo.save_node(GraphNode(id=txn,case_id=b.case_id,branch_id=b.id,kind="transaction",label="Transaction",chain=b.chain,transaction_hash=tx.hash,created_at=now,provenance=["json_rpc",tx.hash]));await self.repo.save_node(GraphNode(id=bridge,case_id=b.case_id,branch_id=b.id,kind="bridge",label=e["bridge_name"],chain=b.chain,address=e["bridge_contract"],transaction_hash=tx.hash,created_at=now,provenance=prov,data={k:v for k,v in e.items() if k!="provenance"}));await self.repo.save_edge(GraphEdge(id=stable_id("EDGE",b.id,tx.hash,"bridge-source",e["bridge_contract"]),case_id=b.case_id,branch_id=b.id,source=src,target=bridge,asset=e["asset"],amount=b.amount,transaction_hash=tx.hash,chain=b.chain,created_at=now,provenance=prov,kind="bridge",data={"transaction_node_id":txn,"role":"source_bridge_transfer"}))
         r=await self.provider.resolve_bridge_destination(e)
         if not r:
-            b.current_address=e["bridge_contract"];b.last_transaction=tx.hash;b.cursor_block=tx.block_number;b.last_checked=now;b.status="OBSCURED";b.terminal_reason="BRIDGE_DESTINATION_UNRESOLVED";b.depth+=1;b.evidence_provenance=prov;await self.repo.save_branch(b);return {"extended":False,"path_count":0,"branches":[]}
+            b.current_address=e["bridge_contract"];b.last_transaction=tx.hash;b.cursor_block=tx.block_number;b.last_checked=now;b.status="OBSCURED";b.terminal_reason="BRIDGE_DESTINATION_UNRESOLVED";b.depth+=1;b.evidence_provenance=prov;await self.repo.save_branch(b);return {"extended":False,"path_count":0,"branches":[],"consumed":int(b.amount),"halted":True}
         req={"destination_chain","destination_address","destination_transaction_hash","destination_block_number"}
         if not req<=r.keys() or not r["destination_transaction_hash"]:
-            b.status="OBSCURED";b.terminal_reason="BRIDGE_DESTINATION_EVIDENCE_INCOMPLETE";await self.repo.save_branch(b);return {"extended":False,"path_count":0,"branches":[]}
+            b.status="OBSCURED";b.terminal_reason="BRIDGE_DESTINATION_EVIDENCE_INCOMPLETE";await self.repo.save_branch(b);return {"extended":False,"path_count":0,"branches":[],"consumed":int(b.amount),"halted":True}
         if r["destination_chain"]!=e["destination_chain"]:raise ValueError("bridge destination resolution contradicts deterministic bridge evidence")
         old=b.chain;dest_chain=r["destination_chain"];dest=r["destination_address"].lower();dst=stable_id("NODE",b.case_id,dest_chain,dest);rprov=list(r.get("provenance") or []);await self.repo.save_node(GraphNode(id=dst,case_id=b.case_id,branch_id=b.id,kind="address",label="Wallet",chain=dest_chain,address=dest,created_at=now,provenance=rprov));await self.repo.save_edge(GraphEdge(id=stable_id("EDGE",b.id,tx.hash,"bridge-destination",dest_chain,dest),case_id=b.case_id,branch_id=b.id,source=bridge,target=dst,asset=r.get("destination_asset") or b.asset,amount=str(r.get("destination_amount") or b.amount),transaction_hash=tx.hash,chain=old,destination_chain=dest_chain,created_at=now,provenance=prov+rprov,kind="bridge",data={"destination_transaction_hash":r["destination_transaction_hash"],"role":"cross_chain_continuation"}));b.chain=dest_chain;b.current_address=dest;b.asset=r.get("destination_asset") or b.asset;b.amount=str(r.get("destination_amount") or b.amount);b.last_transaction=r["destination_transaction_hash"].lower();b.cursor_block=int(r["destination_block_number"]);b.last_checked=now;b.status="MOVING";b.depth+=1;b.terminal_reason=None;b.attribution=None;b.evidence_provenance=rprov;await self.repo.save_branch(b);await self._timeline(b.case_id,"CROSS_CHAIN_TRACE_CONTINUED","Cross chain trace continued",{"branch_id":b.id,"source_chain":old,"destination_chain":dest_chain,"destination_address":dest,"destination_transaction_hash":b.last_transaction,"evidence_provenance":rprov});return {"extended":True,"path_count":1,"branches":[b]}
     async def _attribute(self,b):

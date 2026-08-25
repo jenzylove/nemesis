@@ -176,3 +176,66 @@ async def test_forwarding_chain_stops_at_configured_depth():
     branches = await repo.list_branches(case_id="NMS-C")
     assert max(b.depth for b in branches) <= 4
     assert any(b.terminal_reason == "MAX_DEPTH" for b in branches)
+
+
+@pytest.mark.asyncio
+async def test_branch_advances_past_an_unrelated_outgoing_transaction():
+    """An address often emits transfers that do not touch the tracked asset.
+
+    Reading only the first outgoing transaction made the branch look dormant
+    whenever an unrelated transfer happened to come first.
+    """
+    unrelated = make_tx(h("2"), 2, A, C)          # no native value leaves A
+    relevant = make_tx(h("3"), 3, A, B, native=100)  # the tracked native does
+    rpc = Rpc(
+        transactions={("ethereum", h("2")): unrelated, ("ethereum", h("3")): relevant},
+        movements={("ethereum", A): [
+            {"transaction_hash": h("2"), "block_number": 2, "direction": "out"},
+            {"transaction_hash": h("3"), "block_number": 3, "direction": "out"},
+        ]},
+    )
+    _, repo = await native_trace(rpc)
+    branches = await repo.list_branches(case_id="NMS-C")
+    landed = [b for b in branches if b.current_address == B]
+    assert landed, [(b.current_address, b.status, b.terminal_reason) for b in branches]
+    assert int(landed[0].amount) == 100
+
+
+@pytest.mark.asyncio
+async def test_advancing_stops_once_value_is_accounted_for():
+    """Guards the double-counting failure directly.
+
+    The first candidate moves the whole tracked amount. No later candidate may
+    be followed, or the same funds would appear twice.
+    """
+    first = make_tx(h("2"), 2, A, B, native=100)
+    second = make_tx(h("3"), 3, A, C, native=100)
+    rpc = Rpc(
+        transactions={("ethereum", h("2")): first, ("ethereum", h("3")): second},
+        movements={("ethereum", A): [
+            {"transaction_hash": h("2"), "block_number": 2, "direction": "out"},
+            {"transaction_hash": h("3"), "block_number": 3, "direction": "out"},
+        ]},
+    )
+    _, repo = await native_trace(rpc)
+    branches = await repo.list_branches(case_id="NMS-C")
+    reached = {b.current_address for b in branches}
+    assert B in reached
+    assert C not in reached, "followed a second path for funds already accounted for"
+    total = sum(int(b.amount) for b in branches if b.current_address == B)
+    assert total == 100
+
+
+@pytest.mark.asyncio
+async def test_candidate_advancement_is_bounded():
+    """Never walk an unbounded number of candidates for one hop."""
+    movements, transactions = [], {}
+    for i in range(12):
+        key = "0x" + format(i + 2, "02x") * 32
+        transactions[("ethereum", key)] = make_tx(key, i + 2, A, C)  # none move native
+        movements.append({"transaction_hash": key, "block_number": i + 2, "direction": "out"})
+    rpc = Rpc(transactions=transactions, movements={("ethereum", A): movements})
+    taskmaster, repo = await native_trace(rpc)
+    assert rpc.indexed_calls <= taskmaster.max_candidates_per_hop
+    branch = [b for b in await repo.list_branches(case_id="NMS-C") if b.current_address == A][0]
+    assert branch.status == "DORMANT"
