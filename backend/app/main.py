@@ -26,7 +26,7 @@ from .movement import (
     BitqueryRealtimeMovementDetector,
     HybridMovementProvider,
 )
-from .outcome import build_outcome, derive_case_state
+from .outcome import UNRESOLVED_REASONS, build_outcome, derive_case_state
 from .providers import JsonRpcProvider, RpcProviderError
 from .repository import repository_from_settings
 from .taskmaster import (
@@ -270,8 +270,12 @@ def asset_totals(case, trace: dict) -> list[dict]:
             {"stolen": 0, "located": 0, "unresolved": 0},
         )
         amount = int(branch["amount"])
+        # Funds resting at a known address are located, even when tracing
+        # deliberately stopped there. Only funds whose onward path could not be
+        # established are unresolved, otherwise every number would be identical
+        # and none of them would tell the victim anything.
         total["located"] += amount
-        if branch["status"] in {"MOVING", "DORMANT", "OBSCURED"}:
+        if branch.get("terminal_reason") in UNRESOLVED_REASONS:
             total["unresolved"] += amount
     return [
         {"asset": asset, **values, "unit": "raw"}
