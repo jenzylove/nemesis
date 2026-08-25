@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from .models import ChainName, ERC20Transfer, NFTTransfer, NormalizedTransaction
+from .models import ChainName, ERC20Transfer, NativeTransfer, NFTTransfer, NormalizedTransaction
 
 TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 BASE_L1_STANDARD_BRIDGE = "0x3154cf16ccdb4c6d922629664174b904d80f2c35"
@@ -35,6 +35,12 @@ class BlockchainProvider(ABC):
 
     async def resolve_bridge_destination(self, bridge_evidence: dict) -> dict | None:
         return None
+
+    async def get_indexed_native_transfers(
+        self, chain: ChainName, transaction: NormalizedTransaction, source: str
+    ) -> list[NativeTransfer]:
+        """Indexed native transfers a receipt cannot encode. Empty when unavailable."""
+        return []
 
 
 def _hex_int(value: str | None) -> int:

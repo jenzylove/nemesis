@@ -10,6 +10,30 @@ permissions:
   contents: read
 
 jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject credential material in tracked files
+        run: |
+          set -euo pipefail
+          # Credential-shaped filenames must never be tracked.
+          if git ls-files | grep -Ei '(^|/)(idtoken|tok[0-9]*)\.json$|(^|/)\.env$|(^|/)\.env\.[^e]|service[-_]?account.*\.json$|\.(pem|p12|pfx)$|_rsa$'; then
+            echo "::error::credential-shaped file is tracked in git"
+            exit 1
+          fi
+          # Live secret material must never appear in file contents. The Firebase
+          # web API key is deliberately excluded: it is a public client
+          # identifier, not a secret, and is compiled into the browser bundle.
+          if git ls-files -z \
+            | xargs -0 grep -nIE -- '-----BEGIN [A-Z ]*PRIVATE KEY|sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|eyJhbGciOi[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}' ; then
+            echo "::error::possible secret committed"
+            exit 1
+          fi
+          echo "no credential material found in tracked files"
+
   backend:
     runs-on: ubuntu-latest
     defaults:

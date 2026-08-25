@@ -6,7 +6,7 @@ import httpx
 
 from .alchemy_discovery import ALCHEMY_HOSTS, TRANSFER_CATEGORIES
 from .discovery import BITQUERY_NETWORKS
-from .models import ChainName, NormalizedTransaction
+from .models import ChainName, NativeTransfer, NormalizedTransaction
 from .providers import JsonRpcProvider, RpcProviderError
 
 
@@ -67,6 +67,91 @@ class AlchemyHistoricalMovementDetector:
             {"transaction_hash": tx_hash, "block_number": block, "kind": "indexed", "direction": "out", "detector": "alchemy_historical"}
             for tx_hash, block in sorted(grouped.items(), key=lambda item: (item[1], item[0]))
         ]
+
+
+class AlchemyIndexedTransferResolver:
+    """Reveal native movement that a transaction receipt cannot encode.
+
+    A contract forwarding native value produces an internal call. Receipts carry
+    logs, not internal calls, so `eth_getTransactionReceipt` cannot expose it and
+    a branch whose funds moved that way looks motionless. Alchemy indexes those
+    calls, so it is used to make the movement visible.
+
+    This never replaces deterministic evidence. RPC still proves the transaction
+    exists, succeeded, and belongs to the chain; the index only reveals a
+    transfer inside it that RPC does not encode, and every transfer produced here
+    is tagged with its provenance.
+    """
+
+    def __init__(self, api_key: str, timeout_seconds: float = 20.0, transport=None):
+        self.api_key = api_key
+        self.timeout_seconds = timeout_seconds
+        self.transport = transport
+
+    async def internal_native_transfers(
+        self, chain: ChainName, transaction_hash: str, block_number: int, source: str
+    ) -> list[NativeTransfer]:
+        if not self.api_key:
+            return []
+        source = source.lower()
+        transaction_hash = transaction_hash.lower()
+        endpoint = f"{ALCHEMY_HOSTS[chain]}/{self.api_key}"
+        params: dict[str, Any] = {
+            "fromBlock": hex(int(block_number)),
+            "toBlock": hex(int(block_number)),
+            "fromAddress": source,
+            "category": ["internal", "external"],
+            "withMetadata": False,
+            "excludeZeroValue": True,
+            "order": "asc",
+            "maxCount": "0x64",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds, transport=self.transport) as client:
+                response = await client.post(
+                    endpoint,
+                    json={"jsonrpc": "2.0", "id": 1, "method": "alchemy_getAssetTransfers", "params": [params]},
+                    headers={"content-type": "application/json"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise MovementDetectionError("Alchemy indexed transfer request failed") from exc
+        if payload.get("error"):
+            raise MovementDetectionError(
+                f"Alchemy indexed transfer lookup failed: {payload['error'].get('message', 'provider error')}"
+            )
+        transfers: list[NativeTransfer] = []
+        for row in (payload.get("result") or {}).get("transfers") or []:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("hash") or "").lower() != transaction_hash:
+                continue
+            if str(row.get("from") or "").lower() != source:
+                continue
+            destination = str(row.get("to") or "").lower()
+            if len(destination) != 42 or not destination.startswith("0x"):
+                continue
+            if destination == source:
+                continue
+            raw = (row.get("rawContract") or {}).get("value")
+            try:
+                amount = int(str(raw), 16)
+            except (TypeError, ValueError):
+                continue
+            if amount <= 0:
+                continue
+            transfers.append(NativeTransfer(
+                from_address=source,
+                to_address=destination,
+                raw_amount=str(amount),
+                provenance=[
+                    "alchemy_getAssetTransfers",
+                    f"category:{row.get('category') or 'internal'}",
+                    transaction_hash,
+                ],
+            ))
+        return transfers
 
 
 class BitqueryRealtimeMovementDetector:
@@ -148,11 +233,13 @@ class HybridMovementProvider:
         historical: AlchemyHistoricalMovementDetector | None = None,
         realtime: BitqueryRealtimeMovementDetector | None = None,
         realtime_lag_blocks: int = 256,
+        indexed_transfers: AlchemyIndexedTransferResolver | None = None,
     ):
         self.rpc = rpc
         self.historical = historical
         self.realtime = realtime
         self.realtime_lag_blocks = max(20, realtime_lag_blocks)
+        self.indexed_transfers = indexed_transfers
 
     async def _latest(self, chain: ChainName) -> int:
         value = await self.rpc._call(chain, "eth_blockNumber", [])
@@ -172,9 +259,19 @@ class HybridMovementProvider:
                 tx = await self.rpc.get_normalized_transaction(chain, candidate["transaction_hash"])
             except (LookupError, RpcProviderError):
                 continue
+            verified_by = "json_rpc"
             if not self._is_verified_outgoing(tx, address):
-                continue
-            verified.append({**candidate, "block_number": tx.block_number, "verified_by": "json_rpc"})
+                # The receipt shows no outgoing value, which is also what a
+                # contract-forwarded internal transfer looks like. Consult the
+                # index before concluding the address did not move funds.
+                try:
+                    internal = await self.get_indexed_native_transfers(chain, tx, address)
+                except MovementDetectionError:
+                    continue
+                if not internal:
+                    continue
+                verified_by = "json_rpc+alchemy_internal"
+            verified.append({**candidate, "block_number": tx.block_number, "verified_by": verified_by})
         return sorted(verified, key=lambda item: (item["block_number"], item["transaction_hash"]))
 
     async def get_address_movements(
@@ -207,6 +304,21 @@ class HybridMovementProvider:
 
     async def get_normalized_transaction(self, chain: ChainName, tx_hash: str):
         return await self.rpc.get_normalized_transaction(chain, tx_hash)
+
+    async def get_indexed_native_transfers(
+        self, chain: ChainName, transaction: NormalizedTransaction, source: str
+    ) -> list[NativeTransfer]:
+        """Native transfers inside a verified transaction that its receipt omits.
+
+        Raises MovementDetectionError when the index cannot be reached, so the
+        caller can tell "the evidence says nothing moved" apart from "NEMESIS
+        could not retrieve the evidence".
+        """
+        if not self.indexed_transfers:
+            return []
+        return await self.indexed_transfers.internal_native_transfers(
+            chain, transaction.hash, transaction.block_number, source
+        )
 
     async def get_bridge_evidence(self, *args, **kwargs):
         return await self.rpc.get_bridge_evidence(*args, **kwargs)

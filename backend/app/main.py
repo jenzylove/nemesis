@@ -22,6 +22,7 @@ from .discovery import (
 from .models import CaseCreate, CaseResponse, ChainName
 from .movement import (
     AlchemyHistoricalMovementDetector,
+    AlchemyIndexedTransferResolver,
     BitqueryRealtimeMovementDetector,
     HybridMovementProvider,
 )
@@ -48,6 +49,14 @@ provider = HybridMovementProvider(
     rpc_provider,
     historical=(
         AlchemyHistoricalMovementDetector(
+            settings.alchemy_api_key,
+            timeout_seconds=settings.rpc_timeout_seconds,
+        )
+        if settings.alchemy_api_key
+        else None
+    ),
+    indexed_transfers=(
+        AlchemyIndexedTransferResolver(
             settings.alchemy_api_key,
             timeout_seconds=settings.rpc_timeout_seconds,
         )

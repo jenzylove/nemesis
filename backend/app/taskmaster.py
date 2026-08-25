@@ -87,7 +87,7 @@ class Taskmaster:
     async def trace_initial(self,case_id,evidence:DeterministicEvidence):
         tx=evidence.transaction;wallet=evidence.submitted_wallet.lower();await self._timeline(case_id,"TRACING_FUNDS","Tracing funds",{"transaction_hash":tx.hash});branches=[];now=datetime.now(timezone.utc)
         for i,p in enumerate(self._paths(tx,wallet,None,None)):
-            b=TraceBranch(id=stable_id("BR",case_id,tx.hash,i,p["asset"],p["destination"]),case_id=case_id,current_address=p["destination"],chain=tx.chain,asset=p["asset"],amount=p["amount"],status="MOVING",last_transaction=tx.hash,cursor_block=tx.block_number,last_checked=now,evidence_provenance=["json_rpc",p["ref"],tx.hash])
+            b=TraceBranch(id=stable_id("BR",case_id,tx.hash,i,p["asset"],p["destination"]),case_id=case_id,current_address=p["destination"],chain=tx.chain,asset=p["asset"],amount=p["amount"],status="MOVING",last_transaction=tx.hash,cursor_block=tx.block_number,last_checked=now,evidence_provenance=list(dict.fromkeys(["json_rpc",p["ref"],tx.hash,*p.get("provenance",[])])))
             await self.repo.save_branch(b);await self._transfer_graph(b,wallet,p["destination"],tx,p["ref"],"transfer");await self._timeline(case_id,"BRANCH_CREATED","Branch created",{"branch_id":b.id,"address":b.current_address,"asset":b.asset,"amount":b.amount,"depth":b.depth});branches.append(b)
         await self._drain(branches);return [await self.repo.get_branch(b.id) for b in branches]
     async def schedule(self):
@@ -137,6 +137,25 @@ class Taskmaster:
         swap=self._swap(tx,b)
         if swap:return await self._handle_swap(b,tx,swap)
         ps=self._paths(tx,source,b.asset,b.amount)
+        if not ps and b.asset=="native":
+            # A receipt cannot encode a contract-forwarded internal transfer, so
+            # an absent path here is ambiguous: the funds may have moved in a way
+            # RPC does not expose. Consult the index before concluding anything.
+            try:
+                indexed=await self.provider.get_indexed_native_transfers(b.chain,tx,source)
+            except Exception:
+                # Retrieval failed. This is not evidence that funds stopped moving.
+                b.status="OBSCURED";b.terminal_reason="CONTINUATION_EVIDENCE_UNAVAILABLE";b.last_checked=datetime.now(timezone.utc)
+                await self.repo.save_branch(b)
+                await self._timeline(b.case_id,"CONTINUATION_EVIDENCE_UNAVAILABLE","Continuation evidence could not be retrieved",{"branch_id":b.id,"address":source,"transaction_hash":tx.hash})
+                return {"extended":False,"path_count":0,"branches":[]}
+            fresh=[t for t in indexed if not any(
+                e.from_address==t.from_address and e.to_address==t.to_address and e.raw_amount==t.raw_amount
+                for e in tx.native_transfers)]
+            if fresh:
+                tx.native_transfers.extend(fresh)
+                await self._timeline(b.case_id,"INDEXED_CONTINUATION_RESOLVED","Indexed evidence revealed native movement the receipt does not encode",{"branch_id":b.id,"transaction_hash":tx.hash,"transfer_count":len(fresh),"evidence_provenance":sorted({p for t in fresh for p in t.provenance})})
+                ps=self._paths(tx,source,b.asset,b.amount)
         if not ps:await self._dormant(b,"NO_DETERMINISTIC_OUTGOING_PATH");return {"extended":False,"path_count":0,"branches":[]}
         targets=await self._apply(b,tx,ps);return {"extended":True,"path_count":len(targets),"branches":targets}
     def _paths(self,tx,source,asset,amount):
@@ -144,7 +163,7 @@ class Taskmaster:
         if asset in (None,"native") and tx.from_address==source and tx.to_address and int(tx.native_value_wei)>0:c.append({"destination":tx.to_address.lower(),"asset":"native","amount":tx.native_value_wei,"ref":"transaction.native_value_wei","order":-1})
         if asset in (None,"native"):
             for i,t in enumerate(tx.native_transfers):
-                if t.from_address==source:c.append({"destination":t.to_address.lower(),"asset":"native","amount":t.raw_amount,"ref":f"transaction.native_transfers[{i}]","order":i})
+                if t.from_address==source:c.append({"destination":t.to_address.lower(),"asset":"native","amount":t.raw_amount,"ref":f"transaction.native_transfers[{i}]","order":i,"provenance":list(t.provenance)})
         for i,t in enumerate(tx.erc20_transfers):
             if t.from_address==source and (asset is None or asset==t.token_contract):c.append({"destination":t.to_address,"asset":t.token_contract,"amount":t.raw_amount,"ref":f"transaction.erc20_transfers[{i}]","order":t.log_index})
         c.sort(key=lambda x:x["order"])
@@ -173,7 +192,7 @@ class Taskmaster:
         out=[]
         for i,p in enumerate(ps):
             t=b if i==0 else b.model_copy(deep=True,update={"id":stable_id("BR",b.case_id,tx.hash,i,p["asset"],p["destination"]),"parent_branch_id":parent})
-            t.current_address,t.asset,t.amount=p["destination"],p["asset"],p["amount"];t.last_transaction=tx.hash;t.cursor_block=tx.block_number;t.last_checked=datetime.now(timezone.utc);t.status="MOVING";t.depth=depth;t.terminal_reason=None;t.attribution=None;t.evidence_provenance=["json_rpc",p["ref"],tx.hash];await self.repo.save_branch(t);await self._transfer_graph(t,source,p["destination"],tx,p["ref"],"split" if split else "transfer")
+            t.current_address,t.asset,t.amount=p["destination"],p["asset"],p["amount"];t.last_transaction=tx.hash;t.cursor_block=tx.block_number;t.last_checked=datetime.now(timezone.utc);t.status="MOVING";t.depth=depth;t.terminal_reason=None;t.attribution=None;t.evidence_provenance=list(dict.fromkeys(["json_rpc",p["ref"],tx.hash,*p.get("provenance",[])]));await self.repo.save_branch(t);await self._transfer_graph(t,source,p["destination"],tx,p["ref"],"split" if split else "transfer")
             if i:await self._timeline(b.case_id,"BRANCH_CREATED","Branch created",{"branch_id":t.id,"parent_branch_id":parent,"address":t.current_address,"asset":t.asset,"amount":t.amount,"depth":t.depth})
             out.append(t)
         if keep:
