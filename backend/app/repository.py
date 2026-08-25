@@ -44,7 +44,10 @@ class FirestoreCaseRepository(CaseRepository):
     async def initialize(self):
         from google.cloud import firestore
 
-        self.client = firestore.AsyncClient(project=self.project_id, database=self.database)
+        client_options = {"project": self.project_id}
+        if self.database != "(default)":
+            client_options["database"] = self.database
+        self.client = firestore.AsyncClient(**client_options)
         await self.client.collection("_nemesis_health").document("runtime").get()
 
     async def save(self, case):
