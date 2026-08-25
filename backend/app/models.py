@@ -16,6 +16,8 @@ class CaseCreate(BaseModel):
         default=None, min_length=66, max_length=66, pattern=r"^0x[a-fA-F0-9]{64}$"
     )
     incident_time: datetime | None = None
+    # Supplied by the client so it can poll progress before the case exists.
+    progress_token: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{8,64}$")
 
     @field_validator("theft_transaction_hash", mode="before")
     @classmethod

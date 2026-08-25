@@ -27,6 +27,12 @@ from .movement import (
     HybridMovementProvider,
 )
 from .outcome import UNRESOLVED_REASONS, build_outcome, derive_case_state
+from .progress import (
+    FirestoreProgressReporter,
+    InMemoryProgressReporter,
+    ProgressReporter,
+    describe as describe_progress,
+)
 from .providers import JsonRpcProvider, RpcProviderError
 from .repository import repository_from_settings
 from .taskmaster import (
@@ -94,7 +100,8 @@ discovery = (
     if settings.alchemy_api_key
     else None
 )
-workflow = CaseWorkflow(repository, provider, classifier, discovery=discovery)
+progress_reporter: ProgressReporter = InMemoryProgressReporter()
+workflow = CaseWorkflow(repository, provider, classifier, discovery=discovery, progress=progress_reporter)
 taskmaster = None
 bearer = HTTPBearer(auto_error=False)
 
@@ -141,6 +148,7 @@ async def lifespan(_):
     global taskmaster
     await repository.initialize()
     if hasattr(repository, "client") and repository.client is not None:
+        workflow.progress = FirestoreProgressReporter(repository.client)
         monitor_repo = FirestoreMonitoringRepository(repository.client)
         publisher = GooglePubSubPublisher(settings.google_cloud_project, settings.pubsub_topic)
     else:
@@ -281,6 +289,18 @@ def asset_totals(case, trace: dict) -> list[dict]:
         {"asset": asset, **values, "unit": "raw"}
         for asset, values in sorted(totals.items())
     ]
+
+@app.get("/v1/progress/{token}")
+async def get_progress(token: str, user: dict = Depends(require_user)):
+    """Progress for an investigation this user started.
+
+    Returns the phase the workflow has actually reached. An unknown token
+    reports no phase rather than an error, because the client polls from the
+    moment it submits, before the first phase has been published.
+    """
+    record = await workflow.progress.read(token, user["sub"])
+    return describe_progress((record or {}).get("phase"))
+
 
 @app.get("/v1/cases/{case_id}/trace")
 async def get_trace(case_id: str, user: dict = Depends(require_user)):

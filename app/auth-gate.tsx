@@ -12,6 +12,7 @@ import {
   type User,
 } from "firebase/auth";
 import {getApps,initializeApp} from "firebase/app";
+import {openSavedCase} from "./case-bridge";
 
 type CaseSummary={
   id:string;
@@ -68,6 +69,50 @@ function isCreateCase(input:RequestInfo|URL,init?:RequestInit){
 
 const short=(value:string|undefined|null)=>value&&value.length>16?`${value.slice(0,8)}…${value.slice(-6)}`:(value||"—");
 const human=(value:string|undefined|null)=>value?value.replaceAll("_"," "):"Incident investigation";
+
+
+// Authentication failures reach users as plain language. Provider names, SDK
+// codes and internal wording never do: they are meaningless to a victim and
+// invite doubt about whether the failure was their fault. The original error is
+// still written to the console so a developer can diagnose it.
+function authMessage(error:unknown,fallback:string){
+  if(typeof console!=="undefined")console.error("[nemesis auth]",error);
+  const code=typeof error==="object"&&error!==null&&"code" in error?String((error as {code:unknown}).code):"";
+  switch(code){
+    case "auth/popup-closed-by-user":
+    case "auth/cancelled-popup-request":
+    case "auth/user-cancelled":
+      return "Sign in was cancelled.";
+    case "auth/popup-blocked":
+      return "Your browser blocked the sign-in window. Allow pop-ups for this site and try again.";
+    case "auth/network-request-failed":
+    case "auth/timeout":
+      return "Sign in couldn’t be completed. Check your connection and try again.";
+    case "auth/invalid-email":
+      return "That email address doesn’t look right.";
+    case "auth/missing-password":
+    case "auth/weak-password":
+      return "Choose a password of at least 6 characters.";
+    case "auth/invalid-credential":
+    case "auth/invalid-login-credentials":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "That email and password don’t match an account.";
+    case "auth/email-already-in-use":
+      return "An account already exists for that email. Try signing in instead.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Wait a moment and try again.";
+    case "auth/user-disabled":
+      return "That account is not available. Contact support if you think this is wrong.";
+    case "auth/operation-not-allowed":
+    case "auth/configuration-not-found":
+      return "Sign in is temporarily unavailable. Please try again shortly.";
+    default:
+      break;
+  }
+  if(error instanceof TypeError)return "Sign in couldn’t be completed. Check your connection and try again.";
+  return fallback;
+}
 
 export default function AuthGate(){
   const [user,setUser]=useState<User|null>(null);
@@ -140,21 +185,21 @@ export default function AuthGate(){
   },[reopened?.case.id]);
 
   async function google(){
-    if(!auth)return setError("Authentication is not configured yet.");
+    if(!auth)return setError("Sign in is temporarily unavailable. Please try again shortly.");
     setBusy(true);setError("");
     try{await signInWithPopup(auth,new GoogleAuthProvider());}
-    catch(err){setError(err instanceof Error?err.message:"Unable to sign in.");}
+    catch(err){setError(authMessage(err,"Sign in couldn’t be completed. Please try again."));}
     finally{setBusy(false);}
   }
 
   async function emailAuth(){
-    if(!auth)return setError("Authentication is not configured yet.");
+    if(!auth)return setError("Sign in is temporarily unavailable. Please try again shortly.");
     if(!email||password.length<6)return setError("Enter a valid email and a password of at least 6 characters.");
     setBusy(true);setError("");
     try{
       if(mode==="signup")await createUserWithEmailAndPassword(auth,email,password);
       else await signInWithEmailAndPassword(auth,email,password);
-    }catch(err){setError(err instanceof Error?err.message:"Unable to continue.");}
+    }catch(err){setError(authMessage(err,"Sign in couldn’t be completed. Please try again."));}
     finally{setBusy(false);}
   }
 
@@ -164,9 +209,9 @@ export default function AuthGate(){
     try{
       const token=await auth.currentUser.getIdToken();
       const response=await fetch(`${API}/v1/me/cases`,{headers:{Authorization:`Bearer ${token}`}});
-      if(!response.ok)throw new Error(`Could not load investigations (${response.status}).`);
+      if(!response.ok)throw new Error("We couldn’t load your investigations. Please try again.");
       setCases(await response.json());
-    }catch(err){setError(err instanceof Error?err.message:"Could not load investigations.");}
+    }catch(err){setError(authMessage(err,"We couldn’t load your investigations. Please try again."));}
     finally{setHistoryBusy(false);}
   }
 
@@ -184,9 +229,15 @@ export default function AuthGate(){
         fetch(`${API}/v1/cases/${caseId}/trace`,{headers}),
       ]);
       if(!caseRes.ok||!traceRes.ok)throw new Error("Could not reopen this investigation.");
-      setReopened({case:await caseRes.json(),trace:await traceRes.json()});
+      const record=await caseRes.json();
+      const trace=await traceRes.json();
       setHistoryOpen(false);
-    }catch(err){setError(err instanceof Error?err.message:"Could not reopen this investigation.");}
+      // The case view owns the full investigation. Only fall back to the inline
+      // summary if nothing is listening, which happens if the dock is rendered
+      // without the case screen mounted.
+      if(!openSavedCase(record))setReopened({case:record,trace});
+      else setReopened(null);
+    }catch(err){setError(authMessage(err,"We couldn’t reopen this investigation. Please try again."));}
     finally{refreshInFlight.current=false;if(showBusy)setHistoryBusy(false);}
   }
 
@@ -206,7 +257,7 @@ export default function AuthGate(){
         <span className="authEyebrow">NEMESIS ACCOUNT</span>
         <h2>{pending?"Continue your investigation":"Welcome back"}</h2>
         <p>{pending?"Sign in to begin tracing this wallet and keep the case available while NEMESIS monitors fund movement.":"Sign in to open your saved investigations and continue monitoring from any device."}</p>
-        {!configured&&<div className="authNotice">Firebase Authentication still needs to be enabled for this deployment.</div>}
+        {!configured&&<div className="authNotice">Sign in is temporarily unavailable. You can still start an investigation once it is back.</div>}
         <button className="authGoogle" type="button" onClick={google} disabled={busy||!configured}>Continue with Google</button>
         <div className="authDivider"><span>or</span></div>
         <div className="authTabs"><button className={mode==="signin"?"active":""} onClick={()=>setMode("signin")}>Sign in</button><button className={mode==="signup"?"active":""} onClick={()=>setMode("signup")}>Create account</button></div>

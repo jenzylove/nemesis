@@ -1,5 +1,6 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
+import {onOpenSavedCase} from "./case-bridge";
 import {validateEvmAddress,validateTransactionHash} from "./evm-validation.mjs";
 
 type Transfer={log_index:number;token_contract:string;from_address:string;to_address:string;raw_amount:string};
@@ -49,17 +50,17 @@ function Landing({onStart,onDemo}:{onStart:()=>void;onDemo:()=>void}){
   {n:"05",title:"Dormant monitoring",copy:"Keep quiet branches alive in persistent state until new movement appears.",className:"dormantCap",visual:<div className="quietSignal"><i/><i/><i/><i/><i/></div>}
  ];
  return <main className="landing">
-  <nav><Brand/><div className="landingNav"><a href="#system">How it works</a><a href="#intelligence">Intelligence</a><a href="#trust">Trust</a></div><button className="navCta" onClick={onStart}>Start investigation <span>↗</span></button></nav>
+  <nav><Brand/><div className="landingNav"><a href="#system">How it works</a><a href="#intelligence">Intelligence</a><a href="#trust">Trust</a></div><button className="navCta" onClick={onStart} aria-label="Start investigation">Start<b className="ctaWord"> investigation</b> <span>↗</span></button></nav>
   <section className="heroScene" aria-label="NEMESIS autonomous crypto incident response">
    <div className="heroOrb orbOne"/><div className="heroOrb orbTwo"/>
-   <div className="artifact artifactWallet"><span className="artifactLabel">SUBMITTED WALLET</span><b>0x71C4...19E2</b><div className="walletBalance"><small>EXPOSURE TRACED</small><strong>$42,180</strong></div><i className="walletPulse"/></div>
-   <div className="artifact artifactEth"><span className="chainGlyph">◆</span><div><b>Ethereum</b><small>Block 21,847,201</small></div><em>VERIFIED</em></div>
-   <div className="artifact artifactGraph"><span className="artifactLabel">PERSISTED FUND GRAPH</span><svg viewBox="0 0 180 92" aria-hidden="true"><path d="M18 45H65M76 45l29-25M76 45l29 25M116 20h43M116 70h43"/><circle cx="18" cy="45" r="7"/><circle cx="70" cy="45" r="8"/><circle cx="110" cy="20" r="7"/><circle cx="110" cy="70" r="7"/><circle cx="164" cy="20" r="7"/><circle cx="164" cy="70" r="7"/></svg><small>2 ACTIVE BRANCHES</small></div>
-   <div className="artifact artifactTx"><div className="txTop"><span>TRANSACTION</span><i>CONFIRMED</i></div><b>0x3a91...d80f</b><div className="txFlow"><span>42,180 USDC</span><small>→</small><span>10.42 ETH</span></div></div>
+   <div className="artifact artifactWallet"><span className="artifactLabel">SUBMITTED WALLET</span><b>Affected wallet</b><div className="walletBalance"><small>STOLEN ASSETS</small><strong>Identified</strong></div><i className="walletPulse"/></div>
+   <div className="artifact artifactEth"><span className="chainGlyph">◆</span><div><b>Ethereum</b><small>Onchain evidence</small></div><em>VERIFIED</em></div>
+   <div className="artifact artifactGraph"><span className="artifactLabel">PERSISTED FUND GRAPH</span><svg viewBox="0 0 180 92" aria-hidden="true"><path d="M18 45H65M76 45l29-25M76 45l29 25M116 20h43M116 70h43"/><circle cx="18" cy="45" r="7"/><circle cx="70" cy="45" r="8"/><circle cx="110" cy="20" r="7"/><circle cx="110" cy="70" r="7"/><circle cx="164" cy="20" r="7"/><circle cx="164" cy="70" r="7"/></svg><small>BRANCHES PERSISTED</small></div>
+   <div className="artifact artifactTx"><div className="txTop"><span>TRANSACTION</span><i>CONFIRMED</i></div><b>Incident transaction</b><div className="txFlow"><span>Assets out</span><small>→</small><span>Destination</span></div></div>
    <div className="artifact artifactBase"><span className="baseGlyph">B</span><div><b>Base</b><small>Bridge resolved</small></div><em>CONTINUED</em></div>
-   <div className="artifact artifactDormant"><span className="artifactLabel">BRANCH BR 02</span><div className="dormantIcon">◌</div><b>Dormant wallet</b><small>10,680 USDC stationary</small><div className="monitorLine"><i/> MONITORING</div></div>
-   <div className="artifact artifactMovement"><div className="movementHead"><span>MOVEMENT DETECTED</span><i/></div><b>Trace automatically resumed</b><small>3 confirmations · just now</small><div className="movementBars"><i/><i/><i/><i/></div></div>
-   <div className="artifact artifactEvidence"><span className="artifactLabel">EVIDENCE PACKAGE</span><div className="evidenceSeal">✓</div><b>Chain of evidence intact</b><small>18 RPC facts preserved</small></div>
+   <div className="artifact artifactDormant"><span className="artifactLabel">BRANCH BR 02</span><div className="dormantIcon">◌</div><b>Dormant wallet</b><small>No onward movement</small><div className="monitorLine"><i/> MONITORING</div></div>
+   <div className="artifact artifactMovement"><div className="movementHead"><span>MOVEMENT DETECTED</span><i/></div><b>Trace automatically resumed</b><small>On confirmed movement</small><div className="movementBars"><i/><i/><i/><i/></div></div>
+   <div className="artifact artifactEvidence"><span className="artifactLabel">EVIDENCE PACKAGE</span><div className="evidenceSeal">✓</div><b>Chain of evidence intact</b><small>Verified facts preserved</small></div>
    <div className="hero"><div className="eyebrow">AUTONOMOUS CRYPTO INCIDENT RESPONSE</div><h1>Trace stolen crypto.<br/><em>Follow where it goes.</em></h1><p>NEMESIS investigates compromised wallets, traces fund movement with deterministic evidence, and keeps watching when the trail goes quiet.</p><div className="heroActions"><button className="primary" onClick={onStart}>Start investigation <span>→</span></button><button className="textCta" onClick={onStart}>Explore the system</button></div><div className="promise"><span><i>01</i>Deterministic Evidence</span><span><i>02</i>Autonomous Monitoring</span><span><i>03</i>Actionable Escalation</span></div></div>
   </section>
 
@@ -71,7 +72,7 @@ function Landing({onStart,onDemo}:{onStart:()=>void;onDemo:()=>void}){
 
   <section className="monitoringFeature"><div className="monitorCopy reveal"><span className="sectionKicker light">03 / AUTONOMOUS MONITORING</span><h2>The trail goes quiet.<br/><em>NEMESIS does not.</em></h2><p>A dormant branch stays armed in persistent state. Cloud Scheduler triggers rechecks. When new movement is confirmed, Pub/Sub delivers the event and tracing resumes from the exact branch where it stopped.</p><div className="monitorFacts"><span><i/> Persistent branch state</span><span><i/> Automatic movement detection</span><span><i/> Idempotent event processing</span></div></div><div className="monitorStage reveal"><div className="monitorOrbit"><div className="orbitCenter"><span>BR 02</span><b>DORMANT</b><small>WATCHING</small></div><i className="orbitRing r1"/><i className="orbitRing r2"/><i className="orbitPing p1"/><i className="orbitPing p2"/></div><div className="eventCard dormantEvent"><span>12:41:21</span><b>Funds stationary</b><small>10,680 USDC · Base</small></div><div className="eventCard movementEvent"><span>MOVEMENT DETECTED</span><b>Tracing resumed</b><small>New transaction confirmed</small></div><div className="resumePath"><span>DORMANT</span><i>→</i><span>DETECTED</span><i>→</i><span>RESUMED</span></div></div></section>
 
-  <section className="productSection"><div className="sectionIntro reveal"><div><span className="sectionKicker">04 / LIVE INVESTIGATION</span><h2>The case stays legible<br/>as the trail expands.</h2></div><p>The production case view reads from the same real API, persisted graph, and timeline used by the investigation workflow.</p></div><div className="productFrame reveal"><div className="productTop"><Brand/><span><i/> LIVE CASE</span><button onClick={onStart}>Open investigation ↗</button></div><div className="productBody"><div className="productSidebar"><small>CASE</small><b>Overview</b><span>Fund graph</span><span>Evidence</span><span>Timeline</span><div><i/> MONITOR ACTIVE</div></div><div className="productCanvas"><div className="caseTitle"><div><small>CASE NMS-2048</small><h3>Incident investigation</h3></div><span>ACTIONABLE</span></div><div className="caseStats"><div><small>CHAIN</small><b>ETHEREUM</b></div><div><small>TRACE BRANCHES</small><b>04</b></div><div><small>MONITORED</small><b>01</b></div><div><small>RPC STATUS</small><b className="verified">VERIFIED</b></div></div><div className="caseGrid"><div className="caseGraph"><div className="casePanelHead">LIVE FUND GRAPH <span>PERSISTED</span></div><div className="caseNodes"><span>VICTIM<small>0x71C4</small></span><i/><span>ATTACKER<small>0x8F21</small></span><i/><span>SPLIT<small>4 branches</small></span><i/><span>BASE<small>continued</small></span></div></div><div className="caseFeed"><div className="casePanelHead">TIMELINE <span>LIVE</span></div><div><i/><p><b>Actionable destination detected</b><small>RPC evidence persisted</small></p></div><div><i/><p><b>Cross-chain continuation</b><small>Bridge event resolved</small></p></div><div><i/><p><b>Movement detected</b><small>Trace automatically resumed</small></p></div></div></div></div></div></div></section>
+  <section className="productSection"><div className="sectionIntro reveal"><div><span className="sectionKicker">04 / LIVE INVESTIGATION</span><h2>The case stays legible<br/>as the trail expands.</h2></div><p>The production case view reads from the same real API, persisted graph, and timeline used by the investigation workflow.</p></div><div className="productFrame reveal"><div className="productTop"><Brand/><span><i/> LIVE CASE</span><button onClick={onStart}>Open investigation ↗</button></div><div className="productBody"><div className="productSidebar"><small>CASE</small><b>Overview</b><span>Fund graph</span><span>Evidence</span><span>Timeline</span><div><i/> MONITOR ACTIVE</div></div><div className="productCanvas"><div className="caseTitle"><div><small>SAVED CASE</small><h3>Incident investigation</h3></div><span>ACTIONABLE</span></div><div className="caseStats"><div><small>CHAIN</small><b>ETHEREUM</b></div><div><small>TRACE BRANCHES</small><b>PERSISTED</b></div><div><small>MONITORED</small><b>ACTIVE</b></div><div><small>EVIDENCE</small><b className="verified">VERIFIED</b></div></div><div className="caseGrid"><div className="caseGraph"><div className="casePanelHead">LIVE FUND GRAPH <span>PERSISTED</span></div><div className="caseNodes"><span>VICTIM<small>wallet</small></span><i/><span>DESTINATION<small>recipient</small></span><i/><span>SPLIT<small>branches</small></span><i/><span>BRIDGE<small>continued</small></span></div></div><div className="caseFeed"><div className="casePanelHead">TIMELINE <span>LIVE</span></div><div><i/><p><b>Actionable destination detected</b><small>Evidence persisted</small></p></div><div><i/><p><b>Cross-chain continuation</b><small>Bridge event resolved</small></p></div><div><i/><p><b>Movement detected</b><small>Trace automatically resumed</small></p></div></div></div></div></div></div></section>
 
   <section className="evidenceFirst"><div className="evidenceStatement reveal"><span className="sectionKicker">05 / EVIDENCE FIRST</span><h2>AI can interpret the evidence.<br/><em>It cannot rewrite it.</em></h2><p>Transaction receipts, block timestamps, transfer logs, and branch paths are normalized and stored before Gemini examines the case.</p></div><div className="evidenceFlow reveal"><div><span>01</span><b>Provider evidence</b><small>RPC receipts, blocks, logs</small></div><i>→</i><div><span>02</span><b>Deterministic record</b><small>Normalized and persisted</small></div><i>→</i><div><span>03</span><b>Agent interpretation</b><small>Finding with references</small></div></div><div className="evidenceRule reveal"><span>THE RULE</span><blockquote>“Every conclusion points back to facts the chain can prove.”</blockquote><small>Limitations remain visible. Attribution is never invented.</small></div></section>
 
@@ -92,6 +93,7 @@ function Landing({onStart,onDemo}:{onStart:()=>void;onDemo:()=>void}){
 }
 
 function Intake({onBack,onReal,onDemo}:{onBack:()=>void;onReal:(data:RealResponse)=>void;onDemo:()=>void}){
+ const[stage,setStage]=useState<{label:string;index:number;total:number}|null>(null);
  const[wallet,setWallet]=useState("");const[chain,setChain]=useState("auto");const[hash,setHash]=useState("");const[incidentTime,setIncidentTime]=useState("");const[loading,setLoading]=useState(false);const[error,setError]=useState("");const[walletTouched,setWalletTouched]=useState(false);const[hashTouched,setHashTouched]=useState(false);
  const cleanWallet=wallet.trim();const cleanHash=hash.trim();const walletError=validateEvmAddress(wallet);const hashError=validateTransactionHash(hash);const canSubmit=!loading&&!walletError&&!hashError;
  const submitting=useRef(false);
@@ -104,16 +106,31 @@ function Intake({onBack,onReal,onDemo}:{onBack:()=>void;onReal:(data:RealRespons
   try{
    const api=process.env.NEXT_PUBLIC_NEMESIS_API_URL;
    if(!api)throw new Error("The real investigation API is not configured for this deployment.");
-   const body:Record<string,string>={wallet_address:cleanWallet,chain};
+   const token=`p${Date.now().toString(36)}${Math.random().toString(36).slice(2,10)}`;
+   const body:Record<string,string>={wallet_address:cleanWallet,chain,progress_token:token};
    if(cleanHash)body.theft_transaction_hash=cleanHash;
    if(incidentTime)body.incident_time=new Date(incidentTime).toISOString();
+   // Poll the phase the backend has actually reached. Nothing is shown until it
+   // reports one, so the interface never claims progress that has not happened.
+   let polling=true;
+   const poll=async()=>{
+    while(polling){
+     try{
+      const r=await fetch(`${api.replace(/\/$/,"")}/v1/progress/${token}`);
+      if(r.ok){const p=await r.json();if(p?.label)setStage({label:p.label,index:p.index,total:p.total});}
+     }catch{}
+     await new Promise(done=>setTimeout(done,2500));
+    }
+   };
+   void poll();
    const response=await fetch(`${api.replace(/\/$/,"")}/v1/cases`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body),signal:controller.signal});
    const payload=await response.json();
    if(!response.ok)throw new Error(payload.detail||"Investigation failed");
    onReal(payload as RealResponse);
-  }catch(reason){setError(reason instanceof DOMException&&reason.name==="AbortError"?"The investigation request took too long. No duplicate request was started; please try again.":reason instanceof Error?reason.message:"Investigation failed")}finally{clearTimeout(timeout);submitting.current=false;setLoading(false)}
+   polling=false;
+  }catch(reason){polling=false;setError(reason instanceof DOMException&&reason.name==="AbortError"?"The investigation request took too long. No duplicate request was started; please try again.":reason instanceof Error?reason.message:"Investigation failed")}finally{clearTimeout(timeout);submitting.current=false;setLoading(false);setStage(null)}
  }
- return <main className="intake page"><nav><Brand/><button className="linkBtn" onClick={onBack}>← Back</button></nav><div className="formWrap"><div className="eyebrow">OPEN A REAL CASE</div><h2>Start an investigation</h2><p>Start with the affected wallet. If you know the theft transaction, add it for the fastest path. Otherwise NEMESIS will search indexed wallet history for deterministic incident candidates before tracing.</p><div className="fields"><label>Wallet address<input value={wallet} onChange={e=>setWallet(e.target.value)} onBlur={()=>{setWalletTouched(true);setWallet(value=>value.trim())}} aria-invalid={Boolean((walletTouched||wallet)&&walletError)} aria-describedby="wallet-error" placeholder="0x…"/>{(walletTouched||wallet)&&walletError&&<small id="wallet-error" className="fieldError" role="alert">{walletError}</small>}</label><label>Network<select value={chain} onChange={e=>setChain(e.target.value)}><option value="auto">Auto detect · Ethereum + Base</option><option value="ethereum">Ethereum</option><option value="base">Base</option></select></label><label className="wide">Theft transaction hash <span style={{opacity:.6}}>(optional)</span><input value={hash} onChange={e=>setHash(e.target.value)} onBlur={()=>{setHashTouched(true);setHash(value=>value.trim())}} aria-invalid={Boolean((hashTouched||hash)&&hashError)} aria-describedby="hash-error" placeholder="0x… if known"/>{(hashTouched||hash)&&hashError&&<small id="hash-error" className="fieldError" role="alert">{hashError}</small>}</label><label className="wide">Approximate incident time <span style={{opacity:.6}}>(optional)</span><input type="datetime-local" value={incidentTime} onChange={e=>setIncidentTime(e.target.value)}/></label></div><div className="evidenceNote"><span>◆</span><p><strong>Evidence first</strong>{cleanHash?" RPC evidence is retrieved directly for the transaction you supplied.":" Alchemy indexed wallet history supplies deterministic incident candidates; GoPlus and Chainabuse can enrich risk signals; JSON-RPC still verifies the selected transaction before Gemini receives it."}</p></div>{error&&<div className="formError">{error}</div>}<button className="primary submit" disabled={!canSubmit} onClick={submit}>{loading?(cleanHash?"Investigating onchain evidence…":"Discovering likely theft activity…"):(cleanHash?"Create case & begin investigation":"Discover incident & begin investigation")} <span>↗</span></button><button className="demoButton" onClick={onDemo}>Run deterministic demo instead</button></div></main>
+ return <main className="intake page"><nav><Brand/><button className="linkBtn" onClick={onBack}>← Back</button></nav><div className="formWrap"><div className="eyebrow">OPEN A REAL CASE</div><h2>Start an investigation</h2><p>Start with the affected wallet. If you know the theft transaction, add it for the fastest path. Otherwise NEMESIS searches the wallet’s history and verifies the likely incident before tracing.</p><div className="fields"><label>Wallet address<input value={wallet} onChange={e=>setWallet(e.target.value)} onBlur={()=>{setWalletTouched(true);setWallet(value=>value.trim())}} aria-invalid={Boolean((walletTouched||wallet)&&walletError)} aria-describedby="wallet-error" placeholder="0x…"/>{(walletTouched||wallet)&&walletError&&<small id="wallet-error" className="fieldError" role="alert">{walletError}</small>}</label><label>Network<select value={chain} onChange={e=>setChain(e.target.value)}><option value="auto">Auto detect · Ethereum + Base</option><option value="ethereum">Ethereum</option><option value="base">Base</option></select></label><label className="wide">Theft transaction hash <span style={{opacity:.6}}>(optional)</span><input value={hash} onChange={e=>setHash(e.target.value)} onBlur={()=>{setHashTouched(true);setHash(value=>value.trim())}} aria-invalid={Boolean((hashTouched||hash)&&hashError)} aria-describedby="hash-error" placeholder="0x… if known"/>{(hashTouched||hash)&&hashError&&<small id="hash-error" className="fieldError" role="alert">{hashError}</small>}</label><label className="wide">Approximate incident time <span style={{opacity:.6}}>(optional)</span><input type="datetime-local" value={incidentTime} onChange={e=>setIncidentTime(e.target.value)}/></label></div><div className="evidenceNote"><span>◆</span><p><strong>Evidence first</strong>{cleanHash?" NEMESIS verifies the transaction you supplied onchain before making any assessment.":" NEMESIS verifies onchain activity before making any assessment. Facts, interpretation, and unknowns stay clearly separated."}</p></div>{error&&<div className="formError">{error}</div>}<button className="primary submit" disabled={!canSubmit} onClick={submit}>{loading?(stage?`${stage.label}…`:"Starting investigation…"):(cleanHash?"Create case & begin investigation":"Discover incident & begin investigation")} <span>↗</span></button>{loading&&<div className="stageTrack" role="status" aria-live="polite"><div className="stageBar"><i style={{width:`${stage?Math.round((stage.index/stage.total)*100):4}%`}}/></div><small>{stage?`Step ${stage.index} of ${stage.total} · ${stage.label}`:"Contacting the investigation runtime"}</small><small className="stageNote">A full wallet investigation verifies every hop onchain and can take a few minutes.</small></div>}<button className="demoButton" onClick={onDemo}>Run deterministic demo instead</button></div></main>
 }
 
 function Shell({children,onExit,onHome,monitor=false}:{children:(section:CaseSection)=>React.ReactNode;onExit:()=>void;onHome:()=>void;monitor?:boolean}){
@@ -131,15 +148,105 @@ function AmbiguousCase({data,onResolved,onExit,onHome}:{data:RealResponse;onReso
  async function choose(hash:string){if(loading)return;setLoading(hash);setError("");const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),90000);try{const api=process.env.NEXT_PUBLIC_NEMESIS_API_URL?.replace(/\/$/,"");if(!api)throw new Error("Investigation API is not configured.");const r=await fetch(`${api}/v1/cases`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({wallet_address:data.case.wallet_address,chain:data.case.chain,theft_transaction_hash:hash}),signal:controller.signal});const payload=await r.json();if(!r.ok)throw new Error(payload.detail||"Candidate investigation failed");onResolved(payload as RealResponse)}catch(reason){setError(reason instanceof Error?reason.message:"Candidate investigation failed")}finally{clearTimeout(timeout);setLoading(null)}}
  return <main className="intake page"><nav><Brand onClick={onHome}/><button className="linkBtn" onClick={onExit}>← New investigation</button></nav><div className="formWrap"><div className="eyebrow">AMBIGUOUS INCIDENT</div><h2>More than one transaction is plausible.</h2><p>{d.ambiguity_reason||"Choose the incident transaction below, or start again and add an approximate incident time."}</p><div className="evidenceNote"><span>◆</span><p><strong>Tracing is paused.</strong> NEMESIS will not build a fund graph until the incident is confidently selected by evidence or by you.</p></div><div className="transferList">{d.candidates.map((candidate,index)=><div key={candidate.transaction_hash} style={{marginBottom:12}}><span>#{index+1} · {Math.round(candidate.selection_confidence*100)}% selection confidence</span><b>{short(candidate.transaction_hash)}</b><small>{candidate.reasons.slice(0,3).join(" · ")}</small><button className="primary" disabled={!!loading} onClick={()=>choose(candidate.transaction_hash)}>{loading===candidate.transaction_hash?"Verifying…":"Choose this transaction"}</button></div>)}</div>{error&&<div className="formError">{error}</div>}</div></main>
 }
-function tracePositions(trace:TraceState){
- const incoming=new Map(trace.graph.nodes.map(node=>[node.id,0]));const children=new Map<string,string[]>();
- trace.graph.edges.forEach(edge=>{incoming.set(edge.target,(incoming.get(edge.target)||0)+1);children.set(edge.source,[...(children.get(edge.source)||[]),edge.target])});
- const roots=trace.graph.nodes.filter(node=>(incoming.get(node.id)||0)===0).map(node=>node.id);const levels=new Map<string,number>();const queue=roots.length?roots:[trace.graph.nodes[0]?.id].filter(Boolean) as string[];
- queue.forEach(id=>levels.set(id,0));while(queue.length){const id=queue.shift()!;for(const child of children.get(id)||[]){const level=(levels.get(id)||0)+1;if(!levels.has(child)||level<(levels.get(child)||0)){levels.set(child,level);queue.push(child)}}}
- trace.graph.nodes.forEach(node=>{if(!levels.has(node.id))levels.set(node.id,0)});const max=Math.max(1,...levels.values());const byLevel=new Map<number,string[]>();trace.graph.nodes.forEach(node=>{const level=levels.get(node.id)||0;byLevel.set(level,[...(byLevel.get(level)||[]),node.id])});const positions=new Map<string,{x:number;y:number}>();for(const[level,ids]of byLevel){ids.forEach((id,index)=>positions.set(id,{x:5+(level/max)*82,y:12+((index+1)/(ids.length+1))*72}))}return positions;
+type GraphLayout={
+ nodes:{id:string;kind:string;label:string;chain:string;address:string|null;transaction_hash:string|null;branch_id:string|null;x:number;y:number}[];
+ edges:{id:string;source:string;target:string;asset:string;amount:string;kind:string;transaction_hash:string;ax:number;ay:number;bx:number;by:number}[];
+ height:number;depth:number;compact:boolean;
+};
+
+// Nodes carrying no edge are not part of the fund path. The trace engine records
+// a node for each transaction alongside the transfer edge it belongs to, so
+// drawing them adds a disconnected marker per hop and buries the path the victim
+// is trying to read. The transaction is shown on the edge that represents it.
+function traceLayout(trace:TraceState):GraphLayout{
+ const connected=new Set<string>();
+ trace.graph.edges.forEach(edge=>{connected.add(edge.source);connected.add(edge.target)});
+ const nodes=trace.graph.nodes.filter(node=>connected.has(node.id));
+ if(!nodes.length)return {nodes:[],edges:[],height:320,depth:0,compact:false};
+
+ const children=new Map<string,string[]>();const incoming=new Map<string,number>();
+ nodes.forEach(node=>incoming.set(node.id,0));
+ trace.graph.edges.forEach(edge=>{
+  if(!incoming.has(edge.target)||!incoming.has(edge.source))return;
+  incoming.set(edge.target,(incoming.get(edge.target)||0)+1);
+  children.set(edge.source,[...(children.get(edge.source)||[]),edge.target]);
+ });
+
+ // Longest-path depth keeps a node to the right of every parent, so an edge
+ // never points backwards and hop order reads left to right.
+ const level=new Map<string,number>();
+ const roots=nodes.filter(node=>(incoming.get(node.id)||0)===0).map(node=>node.id);
+ const queue=roots.length?[...roots]:[nodes[0].id];
+ queue.forEach(id=>level.set(id,0));
+ let guard=0;
+ while(queue.length&&guard++<20000){
+  const id=queue.shift()!;
+  for(const child of children.get(id)||[]){
+   const next=(level.get(id)||0)+1;
+   if(next>(level.get(child)??-1)){level.set(child,next);queue.push(child)}
+  }
+ }
+ nodes.forEach(node=>{if(!level.has(node.id))level.set(node.id,0)});
+
+ const byLevel=new Map<number,string[]>();
+ nodes.forEach(node=>{const l=level.get(node.id)||0;byLevel.set(l,[...(byLevel.get(l)||[]),node.id])});
+ const depth=Math.max(...byLevel.keys());
+ const widest=Math.max(...[...byLevel.values()].map(ids=>ids.length));
+ const compact=nodes.length>14||widest>6;
+ // Give every node its own row rather than compressing a wide level into a
+ // fixed height, then let the panel scroll. Overlapping markers are unreadable
+ // and hide exactly the branch fan-out this view exists to show.
+ const rowHeight=compact?38:64;
+ const height=Math.max(320,widest*rowHeight+70);
+
+ const positions=new Map<string,{x:number;y:number}>();
+ for(const[l,ids]of byLevel){
+  const x=depth?6+(l/depth)*80:44;
+  ids.forEach((id,index)=>positions.set(id,{x,y:((index+1)/(ids.length+1))*100}));
+ }
+ return {
+  nodes:nodes.map(node=>({...node,...positions.get(node.id)!})),
+  edges:trace.graph.edges.flatMap(edge=>{
+   const a=positions.get(edge.source),b=positions.get(edge.target);
+   return a&&b?[{...edge,ax:a.x,ay:a.y,bx:b.x,by:b.y}]:[];
+  }),
+  height,depth,compact,
+ };
 }
+
+function nodeKindClass(kind:string){
+ if(kind==="bridge")return "bridge";
+ if(kind==="entity")return "good";
+ if(kind==="swap")return "process";
+ return "victim";
+}
+
 function RealGraph({data,trace}:{data:RealResponse;trace:TraceState|null}){
- const tx=data.case.evidence!.transaction;if(trace?.graph.nodes.length){const positions=tracePositions(trace);return <div className="graph realGraph"><div className="graphGrid"/><svg viewBox="0 0 100 100" preserveAspectRatio="none">{trace.graph.edges.map(e=>{const a=positions.get(e.source),b=positions.get(e.target);return a&&b?<line key={e.id} x1={a.x+4} y1={a.y+3} x2={b.x+4} y2={b.y+3}/>:null})}</svg>{trace.graph.nodes.map(n=>{const p=positions.get(n.id)!;return <div key={n.id} className="node process" style={{left:`${p.x}%`,top:`${p.y}%`}}><span>{n.label.toUpperCase()}</span><small>{n.chain.toUpperCase()} · {short(n.address||n.transaction_hash)}</small></div>})}</div>}
+ const tx=data.case.evidence!.transaction;
+ if(trace?.graph.nodes.length){
+  const layout=traceLayout(trace);
+  if(layout.nodes.length){
+   const branchStatus=new Map(trace.branches.map(b=>[b.id,b.status]));
+   return <div className="graphScroll"><div className={`graph realGraph${layout.compact?" graphCompact":""}`} style={{height:`${layout.height}px`}}>
+    <div className="graphGrid"/>
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+     {layout.edges.map(e=><line key={e.id} className={`edge-${e.kind}`} x1={e.ax} y1={e.ay} x2={e.bx} y2={e.by}/>)}
+    </svg>
+    {layout.nodes.map(n=>{
+     const status=n.branch_id?branchStatus.get(n.branch_id):undefined;
+     return <div key={n.id} className={`node ${nodeKindClass(n.kind)}${status?` st-${status.toLowerCase()}`:""}`}
+       style={{left:`${n.x}%`,top:`${n.y}%`}}
+       title={`${n.label} · ${n.chain}${n.address?` · ${n.address}`:""}${status?` · ${status}`:""}`}>
+      <span>{n.label.toUpperCase()}</span>
+      <small>{short(n.address||n.transaction_hash)}</small>
+     </div>;
+    })}
+   </div>
+   <div className="graphExplanation">{layout.nodes.length} addresses · {layout.edges.length} verified transfers · {layout.depth+1} hops deep. Each line is one transaction that moved traced funds; hover any point for its address and branch state.</div>
+   </div>;
+  }
+ }
+
  const graphNodes=[{label:"SUBMITTED WALLET",sub:short(data.case.wallet_address),x:8,type:"victim"},{label:"TRANSACTION FROM",sub:short(tx.from_address),x:35,type:"process"},{label:tx.to_address?"TRANSACTION TO":"CONTRACT CREATED",sub:short(tx.to_address),x:63,type:tx.status==="success"?"process":"bad"},{label:"RPC VERIFIED",sub:`block ${tx.block_number}`,x:88,type:"good"}];return <div className="graph realGraph"><div className="graphGrid"/><svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="12" y1="45" x2="39" y2="45"/><line x1="39" y1="45" x2="67" y2="45"/><line x1="67" y1="45" x2="92" y2="45"/></svg>{graphNodes.map(n=><div key={n.label} className={`node ${n.type}`} style={{left:`${n.x}%`,top:"45%"}}><span>{n.label}</span><small>{n.sub}</small></div>)}</div>
 }
 
@@ -174,6 +281,16 @@ function DemoCaseScreen({onExit,onHome}:{onExit:()=>void;onHome:()=>void}){
 
 export default function Home(){
  const[view,setView]=useState<"landing"|"intake"|"real"|"demo">("landing");const[real,setReal]=useState<RealResponse|null>(null);
+ // Reopening from the account dock restores the full investigation: graph,
+ // timeline, evidence, branch state and outcome. The case screen fetches its
+ // own trace, so only the case record has to travel.
+ useEffect(()=>onOpenSavedCase(saved=>{
+  const payload=saved as unknown as RealResponse["case"];
+  if(!payload?.evidence)return;
+  setReal({factual_source:"json_rpc",agent_runtime:payload.finding?"google_adk_gemini":"unavailable",case:payload});
+  setView("real");
+  if(typeof window!=="undefined")window.scrollTo({top:0});
+ }),[]);
  if(view==="landing")return <Landing onStart={()=>setView("intake")} onDemo={()=>setView("demo")}/>;
  if(view==="intake")return <Intake onBack={()=>setView("landing")} onReal={data=>{setReal(data);setView("real")}} onDemo={()=>setView("demo")}/>;
  if(view==="real"&&real?.case.state==="AMBIGUOUS_INCIDENT")return <AmbiguousCase data={real} onResolved={setReal} onExit={()=>setView("intake")} onHome={()=>setView("landing")}/>;

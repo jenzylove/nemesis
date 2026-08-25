@@ -5,6 +5,7 @@ from .discovery import DiscoveryProviderError, DiscoveryUnavailableError
 from .incident_selection import rank_verified_candidates, wallet_outflow
 from .models import CaseCreate, CaseResponse, DeterministicEvidence, InvestigationCase
 from .movement import MovementDetectionError
+from .progress import ProgressReporter
 from .providers import RpcProviderError
 
 
@@ -33,19 +34,27 @@ def is_evidence_retrieval_failure(error: BaseException) -> bool:
 
 
 class CaseWorkflow:
-    def __init__(self, repository, provider, classifier, taskmaster=None, discovery=None):
+    def __init__(self, repository, provider, classifier, taskmaster=None, discovery=None, progress=None):
         self.repository = repository
         self.provider = provider
         self.classifier = classifier
         self.taskmaster = taskmaster
         self.discovery = discovery
+        self.progress = progress or ProgressReporter()
+
+    async def _report(self, request, owner_user_id, phase):
+        """Announce a phase the workflow has actually reached."""
+        try:
+            await self.progress.publish(getattr(request, "progress_token", None), phase, owner_user_id)
+        except Exception:
+            return None
 
     async def _select_verified_incident(self, chain, wallet, discovery):
         """Rank deterministic RPC evidence and refuse to guess on a close result."""
         return await rank_verified_candidates(
             self.provider, chain, wallet, discovery
         )
-    async def _discover_auto_chain(self, wallet, incident_time):
+    async def _discover_auto_chain(self, wallet, incident_time, reporter=None):
         if self.discovery is None:
             from .discovery import DiscoveryUnavailableError
 
@@ -59,6 +68,8 @@ class CaseWorkflow:
         for chain in SUPPORTED_CHAINS:
             try:
                 discovery = await self.discovery.discover(chain, wallet, incident_time)
+                if reporter:
+                    await reporter("RANKING_CANDIDATES")
                 transaction = await self._select_verified_incident(chain, wallet, discovery)
                 resolved.append((discovery.selected_score or 0, chain, discovery, transaction))
             except Exception as exc:
@@ -119,8 +130,10 @@ class CaseWorkflow:
         try:
             if supplied_hash is None:
                 if request.chain == "auto":
+                    await self._report(request, owner_user_id, "SEARCHING_WALLET_HISTORY")
                     resolved_chain, discovery, transaction = await self._discover_auto_chain(
-                        wallet, request.incident_time
+                        wallet, request.incident_time,
+                        lambda phase: self._report(request, owner_user_id, phase),
                     )
                     case.chain = resolved_chain
                     case.discovery = discovery
@@ -164,11 +177,13 @@ class CaseWorkflow:
                             "resolved transaction hash does not match deterministic RPC evidence"
                         )
 
+            await self._report(request, owner_user_id, "VERIFYING_INCIDENT")
             if transaction.status != "success" or not wallet_outflow(transaction, wallet):
                 raise ValueError(
                     "the supplied transaction contains no deterministic value leaving the submitted wallet"
                 )
 
+            await self._report(request, owner_user_id, "RECONSTRUCTING_ASSETS")
             evidence = DeterministicEvidence(
                 submitted_wallet=wallet,
                 transaction=transaction,
@@ -179,9 +194,11 @@ class CaseWorkflow:
 
             branches = []
             if self.taskmaster:
+                await self._report(request, owner_user_id, "TRACING_FUNDS")
                 branches = await self.taskmaster.trace_initial(case.id, evidence)
 
             try:
+                await self._report(request, owner_user_id, "ASSESSING_COMPROMISE")
                 case.finding = await self.classifier.classify(case.id, evidence)
                 case.finding.compromise_mechanism_confidence = case.finding.confidence
                 runtime = "google_adk_gemini"
@@ -209,6 +226,7 @@ class CaseWorkflow:
             else:
                 case.state = "EVIDENCE_READY"
             case.updated_at = datetime.now(timezone.utc)
+            await self._report(request, owner_user_id, "PREPARING_CASE")
             await self.repository.save(case)
             return CaseResponse(case=case, factual_source="json_rpc", agent_runtime=runtime)
         except Exception as exc:

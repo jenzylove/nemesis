@@ -1,3 +1,27 @@
 .caseMobileBar{display:none}.branchExplanation,.graphExplanation{border-bottom:1px solid #273247;background:#0d1421;color:#91a0b5;padding:12px 15px;font-size:10px;line-height:1.6}.branchExplanation strong,.branchExplanation span{display:block}.branchExplanation strong{color:#e9eef8;font-size:11px;margin-bottom:5px}.graphExplanation{color:#7f8ba0}.branchLabel{display:block;font-style:normal;font:7px monospace;letter-spacing:.12em;color:#66758d;margin-top:8px}.transferList>div{position:relative}.transferList>div>span{letter-spacing:.08em}.realGraph{min-height:300px;height:auto!important;padding:24px 0}.realGraph .node{box-shadow:0 8px 20px rgba(0,0,0,.14)}.realGraph svg line{stroke-width:.5;stroke-dasharray:2 1}.status{white-space:nowrap}.realActivity .now span{line-height:1.55;max-width:520px}.monitorBox small{line-height:1.35}
 @media(max-width:900px){.casePage{padding-top:58px}.caseMobileBar{position:fixed;display:flex;align-items:center;justify-content:space-between;top:0;left:0;right:0;height:58px;padding:0 14px;background:rgba(9,13,22,.96);backdrop-filter:blur(12px);border-bottom:1px solid #273247;z-index:100}.caseMobileBar button{border:0;background:transparent;color:#edf2fb}.caseMobileHome{font:bold 11px monospace;letter-spacing:.16em}.caseMobileNew{font:9px monospace;color:#aab7ca!important;border:1px solid #34435e!important;padding:8px 10px!important}.caseMain header{height:auto;min-height:88px;padding:18px 0}.caseMain header h2{font-size:20px}.workspace{grid-template-columns:1fr!important}.graphPanel{min-height:0}.realGraph{height:330px!important;min-height:330px}.branchExplanation,.graphExplanation{font-size:9px}.transferList{padding:4px 14px 10px}.transferList>div{padding:14px 0}}
 @media(max-width:560px){.realGraph{height:310px!important}.realGraph .node{width:64px;min-height:42px;padding:7px 5px}.realGraph .node span{font-size:7px}.realGraph .node small{font-size:6px}.panelHead{padding:0 12px}.caseMain{padding-bottom:28px}.status{font-size:8px;padding:8px 9px}}
+
+/* A real trace is far larger than the illustrative four-node case. Nodes get a
+   row each and the panel scrolls, because overlapping markers hide the branch
+   fan-out this view exists to show. */
+.graphScroll{max-height:min(70vh,560px);overflow-y:auto;overflow-x:hidden;position:relative}
+.graphScroll .realGraph{height:auto;min-height:0}
+.graphCompact .node{width:66px;min-height:0;padding:5px 4px;border-radius:5px}
+.graphCompact .node span{font-size:6.5px;letter-spacing:.02em}
+.graphCompact .node small{font-size:6px}
+.node.bridge{border-color:#5973d9}
+.node.st-obscured{opacity:.72}
+.node.st-dormant{border-style:dashed}
+.node.st-actionable{border-color:#3fb984;box-shadow:0 0 0 2px rgba(63,185,132,.25)}
+.realGraph svg line.edge-split{stroke-dasharray:3 2}
+.realGraph svg line.edge-bridge{stroke:#5973d9}
+.realGraph svg line.edge-swap{stroke-dasharray:1 2}
+
+/* A wallet investigation runs for minutes. The stage line reports the phase the
+   backend has actually reached rather than a timer. */
+.stageTrack{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.stageBar{height:3px;border-radius:3px;background:rgba(89,115,217,.18);overflow:hidden}
+.stageBar i{display:block;height:100%;background:#5973d9;border-radius:3px;transition:width .5s ease}
+.stageTrack small{font:500 11px/1.4 Inter,Arial,sans-serif;color:#667085}
+.stageTrack .stageNote{opacity:.72}
