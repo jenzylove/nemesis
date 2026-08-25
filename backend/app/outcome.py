@@ -35,8 +35,16 @@ def build_outcome(asset_totals: list[dict], trace: dict) -> dict:
                 "evidence_type": attribution.get("evidence_type"),
                 "actionable": bool(attribution.get("actionable")),
             })
+    sanctioned = [s for s in services if s["entity_type"] == "sanctioned"]
+    contactable = [s for s in services if s["entity_type"] in ("exchange", "service")]
     actions = ["Download and preserve the current evidence package."]
-    if counts["ACTIONABLE"]:
+    if sanctioned:
+        actions.append(
+            "Traced funds reached an address carrying an OFAC sanctions designation. "
+            "Report this case, with the preserved evidence package, to law enforcement "
+            "and to any exchange you filed a report with."
+        )
+    if contactable:
         actions.append("Contact the attributed service with the verified transaction evidence.")
     if counts["DORMANT"]:
         actions.append("Continue monitoring dormant branches for confirmed movement.")
@@ -44,6 +52,11 @@ def build_outcome(asset_totals: list[dict], trace: dict) -> dict:
         actions.append("Review unresolved branches and their stated evidence limitations.")
     if not branches:
         summary = "No qualifying trace branch has been established from the verified incident yet."
+    elif sanctioned:
+        summary = (
+            f"{len(sanctioned)} traced branch(es) reached an OFAC-sanctioned address; "
+            "unresolved branches remain monitored where applicable."
+        )
     elif counts["ACTIONABLE"]:
         summary = f"{counts['ACTIONABLE']} actionable destination branch(es) identified; unresolved branches remain monitored where applicable."
     elif counts["DORMANT"]:
@@ -61,5 +74,6 @@ def build_outcome(asset_totals: list[dict], trace: dict) -> dict:
         "limitations": [
             "Amounts use raw onchain units when verified token decimals are unavailable.",
             "NEMESIS cannot freeze funds, access KYC records, or guarantee recovery.",
+            "A sanctions designation identifies the destination address, not the person controlling it.",
         ],
     }

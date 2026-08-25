@@ -143,7 +143,7 @@ class AgentFinding(BaseModel):
 
 class InvestigationCase(BaseModel):
     id: str
-    state: Literal["INVESTIGATING", "AMBIGUOUS_INCIDENT", "MONITORING", "ACTIONABLE", "EVIDENCE_READY", "LIMITED", "FAILED"]
+    state: Literal["INVESTIGATING", "AMBIGUOUS_INCIDENT", "MONITORING", "ACTIONABLE", "EVIDENCE_READY", "LIMITED", "EVIDENCE_RETRIEVAL_FAILED", "FAILED"]
     created_at: datetime
     updated_at: datetime
     wallet_address: str

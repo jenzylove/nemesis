@@ -1,11 +1,20 @@
+import json
 from abc import ABC
+from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import ChainName
 
-EntityType = Literal["exchange", "bridge", "mixer", "protocol", "service"]
+EntityType = Literal["exchange", "bridge", "mixer", "protocol", "service", "sanctioned"]
+
+# Destination classes a victim can realistically act on. Bridges and bare
+# protocol contracts are recorded but are not, by themselves, a next step.
+ACTIONABLE_ENTITY_TYPES = frozenset({"exchange", "service", "sanctioned"})
+
+SANCTIONS_DATA_PATH = Path(__file__).parent / "data" / "ofac_sanctioned_addresses.json"
 
 
 class EntityAttribution(BaseModel):
@@ -25,7 +34,7 @@ class EntityAttribution(BaseModel):
 
     @property
     def actionable(self) -> bool:
-        return self.entity_type in {"exchange", "service"}
+        return self.entity_type in ACTIONABLE_ENTITY_TYPES
 
 
 class EntityAttributionProvider(ABC):
@@ -43,7 +52,46 @@ class CuratedAttributionProvider(EntityAttributionProvider):
         return self.entries.get((chain, address.lower()))
 
 
+@lru_cache(maxsize=1)
+def _sanctions_document() -> dict:
+    if not SANCTIONS_DATA_PATH.exists():
+        return {"addresses": []}
+    with SANCTIONS_DATA_PATH.open(encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def sanctioned_attributions() -> list[EntityAttribution]:
+    """OFAC-designated addresses.
+
+    The source list publishes addresses without entity names, so NEMESIS states
+    only what the source supports: that the address carries a sanctions
+    designation. It does not name an operator it cannot evidence.
+    """
+    document = _sanctions_document()
+    source = document.get("source_name") or "OFAC SDN sanctioned digital currency addresses"
+    retrieved = document.get("retrieved_at")
+    if retrieved:
+        source = f"{source} (retrieved {retrieved})"
+    entries: list[EntityAttribution] = []
+    for address in document.get("addresses") or []:
+        for chain in ("ethereum", "base"):
+            entries.append(EntityAttribution(
+                entity_name="OFAC sanctioned address",
+                entity_type="sanctioned",
+                address=address,
+                chain=chain,
+                source=source,
+                confidence=1.0,
+                evidence_type="ofac_sdn_sanctions_list",
+            ))
+    return entries
+
+
 def default_curated_attributions() -> list[EntityAttribution]:
+    return _bridge_attributions() + sanctioned_attributions()
+
+
+def _bridge_attributions() -> list[EntityAttribution]:
     source = "Base official contract registry"
     evidence_type = "official_contract_registry"
     return [
