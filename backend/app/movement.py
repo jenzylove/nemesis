@@ -10,6 +10,11 @@ from .models import ChainName, NativeTransfer, NormalizedTransaction
 from .providers import JsonRpcProvider, RpcProviderError
 
 
+# How many indexed candidates may be RPC-verified for a single hop. Bounded so a
+# noisy address cannot consume provider budget.
+MOVEMENT_CANDIDATE_LIMIT = 25
+
+
 class MovementDetectionError(RuntimeError):
     pass
 
@@ -53,6 +58,7 @@ class AlchemyHistoricalMovementDetector:
             )
         rows = (payload.get("result") or {}).get("transfers") or []
         grouped: dict[str, int] = {}
+        categories: dict[str, set[str]] = {}
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -63,8 +69,22 @@ class AlchemyHistoricalMovementDetector:
                 continue
             if len(tx_hash) == 66 and block > after_block:
                 grouped[tx_hash] = min(block, grouped.get(tx_hash, block))
+                category = str(row.get("category") or "").lower()
+                if category:
+                    categories.setdefault(tx_hash, set()).add(category)
         return [
-            {"transaction_hash": tx_hash, "block_number": block, "kind": "indexed", "direction": "out", "detector": "alchemy_historical"}
+            {
+                "transaction_hash": tx_hash,
+                "block_number": block,
+                "kind": "indexed",
+                "direction": "out",
+                "detector": "alchemy_historical",
+                # Which asset class moved. A drained address emits a great deal of
+                # unrelated traffic, including address-poisoning spam, so the
+                # trace engine uses this to reach for the transactions that can
+                # actually carry the asset it is following.
+                "categories": sorted(categories.get(tx_hash, set())),
+            }
             for tx_hash, block in sorted(grouped.items(), key=lambda item: (item[1], item[0]))
         ]
 
@@ -280,12 +300,16 @@ class HybridMovementProvider:
         latest = await self._latest(chain)
         lag = max(0, latest - after_block)
 
+        # Several verified candidates are returned, not just the earliest. Only
+        # some of an address's outgoing transactions carry the asset a branch is
+        # following, so the trace engine needs the choice. The cursor still
+        # advances to the earliest of them, so nothing is skipped.
         if lag > self.realtime_lag_blocks and self.historical:
             try:
                 historical = await self.historical.find_next(chain, address, after_block)
-                verified = await self._verify(chain, address, historical[:10])
+                verified = await self._verify(chain, address, historical[:MOVEMENT_CANDIDATE_LIMIT])
                 if verified:
-                    return verified[0]["block_number"], [verified[0]]
+                    return verified[0]["block_number"], verified
                 return latest, []
             except MovementDetectionError:
                 pass
@@ -293,9 +317,9 @@ class HybridMovementProvider:
         if self.realtime:
             try:
                 realtime = await self.realtime.find_outgoing(chain, address, after_block)
-                verified = await self._verify(chain, address, realtime[:10])
+                verified = await self._verify(chain, address, realtime[:MOVEMENT_CANDIDATE_LIMIT])
                 if verified:
-                    return verified[0]["block_number"], [verified[0]]
+                    return verified[0]["block_number"], verified
                 return latest, []
             except MovementDetectionError:
                 pass

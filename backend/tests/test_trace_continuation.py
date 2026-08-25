@@ -239,3 +239,44 @@ async def test_candidate_advancement_is_bounded():
     assert rpc.indexed_calls <= taskmaster.max_candidates_per_hop
     branch = [b for b in await repo.list_branches(case_id="NMS-C") if b.current_address == A][0]
     assert branch.status == "DORMANT"
+
+
+@pytest.mark.asyncio
+async def test_native_branch_reaches_past_unrelated_token_traffic():
+    """Reproduces the real Bybit stall.
+
+    The drained address emitted address-poisoning spam and token transfers
+    before the genuine native movement. Walking candidates in block order let
+    that noise exhaust the per-hop budget, and the branch was recorded dormant
+    while ten thousand ETH had already moved on.
+    """
+    transactions, movements = {}, []
+    for i in range(6):  # spam and token transfers arrive first
+        key = "0x" + format(i + 2, "02x") * 32
+        transactions[("ethereum", key)] = make_tx(key, i + 2, A, C)
+        movements.append({"transaction_hash": key, "block_number": i + 2,
+                          "direction": "out", "categories": ["erc20"]})
+    real = "0x" + "ee" * 32
+    transactions[("ethereum", real)] = make_tx(real, 20, A, B, native=100)
+    movements.append({"transaction_hash": real, "block_number": 20,
+                      "direction": "out", "categories": ["external"]})
+
+    rpc = Rpc(transactions=transactions, movements={("ethereum", A): movements})
+    _, repo = await native_trace(rpc)
+    branches = await repo.list_branches(case_id="NMS-C")
+    landed = [b for b in branches if b.current_address == B]
+    assert landed, [(b.current_address, b.status, b.terminal_reason) for b in branches]
+    assert int(landed[0].amount) == 100
+
+
+@pytest.mark.asyncio
+async def test_prioritisation_never_discards_unclassified_candidates():
+    """Category is a preference, not a filter: unknown candidates still run."""
+    key = "0x" + "ab" * 32
+    rpc = Rpc(
+        transactions={("ethereum", key): make_tx(key, 5, A, B, native=100)},
+        movements={("ethereum", A): [{"transaction_hash": key, "block_number": 5, "direction": "out"}]},
+    )
+    _, repo = await native_trace(rpc)
+    landed = [b for b in await repo.list_branches(case_id="NMS-C") if b.current_address == B]
+    assert landed and int(landed[0].amount) == 100

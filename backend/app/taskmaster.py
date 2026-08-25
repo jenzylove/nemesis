@@ -82,7 +82,7 @@ class GooglePubSubPublisher(EventPublisher):
         return self.client.publish(self.client.topic_path(self.project,self.topic),json.dumps(e).encode()).result(timeout=20)
 
 class Taskmaster:
-    def __init__(self,repo,provider,publisher,max_blocks=20,max_depth=8,attribution_provider=None,max_candidates_per_hop=5):
+    def __init__(self,repo,provider,publisher,max_blocks=20,max_depth=8,attribution_provider=None,max_candidates_per_hop=8):
         self.repo,self.provider,self.publisher,self.max_blocks,self.max_depth=repo,provider,publisher,max_blocks,max_depth;self.max_candidates_per_hop=max(1,max_candidates_per_hop);self.attribution_provider=attribution_provider or CuratedAttributionProvider();self.monitoring_gate=asyncio.Semaphore(2)
     async def trace_initial(self,case_id,evidence:DeterministicEvidence):
         tx=evidence.transaction;wallet=evidence.submitted_wallet.lower();await self._timeline(case_id,"TRACING_FUNDS","Tracing funds",{"transaction_hash":tx.hash});branches=[];now=datetime.now(timezone.utc)
@@ -130,6 +130,30 @@ class Taskmaster:
             cursor,moves=await self.provider.get_address_movements(b.chain,b.current_address,b.cursor_block,self.max_blocks);b.cursor_block=cursor;b.last_checked=datetime.now(timezone.utc);out=[m for m in moves if m.get("direction")=="out"]
             if not out:await self._dormant(b);continue
             q.extend(await self._follow(b,out))
+    def _prioritise(self,b,out,hashes):
+        """Order candidates so those able to carry the tracked asset come first.
+
+        A drained address emits a lot of traffic that cannot possibly move the
+        asset being followed, including address-poisoning spam that mimics real
+        token symbols. Walking candidates in pure block order let that noise
+        consume the per-hop budget before the real transfer was ever examined,
+        and the branch was then recorded as dormant while the funds had moved.
+
+        Ordering is a preference, not a filter: a candidate whose category is
+        unknown is still examined, and every candidate is still verified against
+        deterministic evidence before it can extend the branch.
+        """
+        native=b.asset=="native"
+        wanted={"external","internal"} if native else {"erc20","erc721","erc1155"}
+        categories={}
+        for m in out:
+            h=m.get("transaction_hash")
+            if h:categories.setdefault(h,set()).update(m.get("categories") or [])
+        def rank(h):
+            known=categories.get(h) or set()
+            if not known:return 1          # unclassified, still worth examining
+            return 0 if known & wanted else 2
+        return sorted(hashes,key=lambda h:(rank(h),hashes.index(h)))
     async def _follow(self,b,out):
         """Advance the branch on the first outgoing transaction that moves it.
 
@@ -144,11 +168,8 @@ class Taskmaster:
         is the double-counting failure an earlier parallel-path attempt
         introduced, and it stays impossible here by construction.
         """
-        seen=[]
-        for m in out:
-            h=m.get("transaction_hash")
-            if h and h not in seen:seen.append(h)
-            if len(seen)>=self.max_candidates_per_hop:break
+        seen=[h for h in dict.fromkeys(m.get("transaction_hash") for m in out) if h]
+        seen=self._prioritise(b,out,seen)[:self.max_candidates_per_hop]
         for index,tx_hash in enumerate(seen):
             b.last_transaction=tx_hash
             await self.repo.save_branch(b)

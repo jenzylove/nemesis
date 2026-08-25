@@ -97,6 +97,7 @@ async def test_alchemy_historical_detector_returns_earliest_outgoing_transaction
             "kind": "indexed",
             "direction": "out",
             "detector": "alchemy_historical",
+            "categories": [],
         }
     ]
 
