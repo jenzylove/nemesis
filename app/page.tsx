@@ -227,7 +227,7 @@ function RealGraph({data,trace}:{data:RealResponse;trace:TraceState|null}){
   const layout=traceLayout(trace);
   if(layout.nodes.length){
    const branchStatus=new Map(trace.branches.map(b=>[b.id,b.status]));
-   return <div className="graphScroll"><div className={`graph realGraph${layout.compact?" graphCompact":""}`} style={{height:`${layout.height}px`}}>
+   return <div className="graphScroll"><div className={`graph realGraph${layout.compact?" graphCompact":""}`} style={{"--graph-h":`${layout.height}px`} as React.CSSProperties}>
     <div className="graphGrid"/>
     <svg viewBox="0 0 100 100" preserveAspectRatio="none">
      {layout.edges.map(e=><line key={e.id} className={`edge-${e.kind}`} x1={e.ax} y1={e.ay} x2={e.bx} y2={e.by}/>)}

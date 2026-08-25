@@ -6,7 +6,10 @@
    row each and the panel scrolls, because overlapping markers hide the branch
    fan-out this view exists to show. */
 .graphScroll{max-height:min(70vh,560px);overflow-y:auto;overflow-x:hidden;position:relative}
-.graphScroll .realGraph{height:auto;min-height:0}
+/* The base rule pins .realGraph to an automatic height with !important, which
+   collapses the absolutely positioned trace nodes into a pile. A custom
+   property carries the computed height so this rule can win on specificity. */
+.graphScroll .realGraph{height:var(--graph-h)!important;min-height:var(--graph-h)!important}
 .graphCompact .node{width:66px;height:34px;min-height:0;padding:4px;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;justify-content:center}
 .graphCompact .node span{font-size:6.5px;letter-spacing:.02em}
 .graphCompact .node small{font-size:6px}
