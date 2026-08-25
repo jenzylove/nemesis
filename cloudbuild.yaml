@@ -7,17 +7,6 @@ steps:
     entrypoint: gcloud
     args:
       - run
-      - services
-      - update
-      - nemesis-api-staging
-      - --region
-      - ${_REGION}
-      - --remove-env-vars
-      - FIRESTORE_DATABASE
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    entrypoint: gcloud
-    args:
-      - run
       - deploy
       - nemesis-api-staging
       - --image
@@ -45,6 +34,17 @@ steps:
       - "300"
       - --concurrency
       - "8"
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - update
+      - nemesis-api-staging
+      - --region
+      - ${_REGION}
+      - --remove-env-vars
+      - FIRESTORE_DATABASE
 substitutions:
   _REGION: us-central1
   _GEMINI_MODEL: gemini-3.5-flash

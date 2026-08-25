@@ -45,7 +45,7 @@ class FirestoreCaseRepository(CaseRepository):
         from google.cloud import firestore
 
         client_options = {"project": self.project_id}
-        if self.database != "(default)":
+        if self.database not in {"(default)", "%28default%29"}:
             client_options["database"] = self.database
         self.client = firestore.AsyncClient(**client_options)
         await self.client.collection("_nemesis_health").document("runtime").get()
