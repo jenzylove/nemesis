@@ -124,6 +124,15 @@ export default function AuthGate(){
     return()=>{cancelled=true;};
   },[pending,user]);
 
+  // A returning user opens the modal from the account dock, so there is no
+  // intercepted request to resolve and nothing else closes it. Without this the
+  // sign-in succeeds, the dock updates behind the backdrop, and the modal stays
+  // over the page with pointer events captured. When a request is pending the
+  // effect above keeps the modal up until that investigation resumes.
+  useEffect(()=>{
+    if(user&&!pending)setModal(false);
+  },[user,pending]);
+
   useEffect(()=>{
     if(!reopened||!auth?.currentUser)return;
     const id=setInterval(()=>void refreshOpenCase(reopened.case.id,false),15000);
