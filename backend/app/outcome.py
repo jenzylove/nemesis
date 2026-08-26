@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .attribution import ACTIONABLE_ENTITY_TYPES
+
 # Why a branch stopped, and what that means for the victim. These are kept
 # apart deliberately: reaching the configured trace depth means NEMESIS knows
 # where the funds are and chose to stop, while a retrieval failure means it
@@ -60,7 +62,11 @@ def build_outcome(asset_totals: list[dict], trace: dict) -> dict:
                 "confidence": attribution.get("confidence"),
                 "source": attribution.get("source"),
                 "evidence_type": attribution.get("evidence_type"),
-                "actionable": bool(attribution.get("actionable")),
+                # Derived from the entity type rather than read from the branch.
+                # `actionable` is a property on the attribution model, so it is
+                # absent from the serialised branch and previously always read
+                # as false, contradicting the branch's own ACTIONABLE status.
+                "actionable": attribution.get("entity_type") in ACTIONABLE_ENTITY_TYPES,
             })
 
     # Where the money actually sits now, largest first. This is the question a
