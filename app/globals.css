@@ -49,16 +49,10 @@
 /* The fixed account dock owns the top-right corner on narrow screens; the
    collapsed nav CTA rendered underneath it and was unclickable. The hero
    call to action is the intended mobile entry point. */
-@media(max-width:760px){
-  /* Both header controls stay available: the account dock keeps the corner and
-     the nav call to action sits clear of it with a shortened label. */
-  .navCta{display:inline-flex;align-items:center;font-size:9px;padding:9px 10px}
-  .navCta .ctaWord{display:none}
-  .landing nav{padding-right:104px}
-}
+
 
 /* The account dock is fixed in the top-right and grows when signed in, where
    its label becomes "My investigations". At wider viewports it covered the nav
    call to action, which then could not be clicked. The nav reserves room for
    it rather than letting the two overlap. */
-@media(min-width:761px){.landing nav{padding-right:230px}}
+

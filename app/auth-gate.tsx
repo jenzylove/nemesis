@@ -12,7 +12,7 @@ import {
   type User,
 } from "firebase/auth";
 import {getApps,initializeApp} from "firebase/app";
-import {openSavedCase} from "./case-bridge";
+import {openSavedCase,requestStartInvestigation} from "./case-bridge";
 
 type CaseSummary={
   id:string;
@@ -114,6 +114,16 @@ function authMessage(error:unknown,fallback:string){
   return fallback;
 }
 
+const RETURNING_KEY="nemesis.returning";
+
+function markReturning(){
+  try{window.localStorage.setItem(RETURNING_KEY,"1");}catch{}
+}
+
+function hasReturned(){
+  try{return window.localStorage.getItem(RETURNING_KEY)==="1";}catch{return false;}
+}
+
 export default function AuthGate(){
   const [user,setUser]=useState<User|null>(null);
   const [ready,setReady]=useState(!configured);
@@ -130,11 +140,25 @@ export default function AuthGate(){
   const [reopened,setReopened]=useState<ReopenedCase|null>(null);
   const refreshInFlight=useRef(false);
 
-  const label=useMemo(()=>user?"My investigations":"Sign in",[user]);
+  const [returning,setReturning]=useState(false);
+  useEffect(()=>{setReturning(hasReturned());},[]);
+
+  // One control owns this corner. A first-time visitor is offered the thing they
+  // came for; once someone has signed in on this device the same slot becomes
+  // the way back to their investigations.
+  const label=useMemo(()=>user?"My investigations":returning?"Sign in":"Start investigation",[user,returning]);
+
+  function dockAction(){
+    if(user)return loadCases();
+    if(returning)return setModal(true);
+    // Nothing is listening only if the case screen is unmounted; fall back to
+    // sign-in rather than leaving the control dead.
+    if(!requestStartInvestigation())setModal(true);
+  }
 
   useEffect(()=>{
     if(!auth){setReady(true);return;}
-    return onAuthStateChanged(auth,next=>{setUser(next);setReady(true);});
+    return onAuthStateChanged(auth,next=>{setUser(next);setReady(true);if(next){markReturning();setReturning(true);}});
   },[]);
 
   useEffect(()=>{
@@ -248,7 +272,7 @@ export default function AuthGate(){
   const actionable=reopened?.trace.branches.filter(branch=>branch.status==="ACTIONABLE").length||0;
   return <>
     <div className="authDock" role="navigation" aria-label="Account">
-      <button type="button" className="authPrimary" onClick={()=>user?loadCases():setModal(true)}>{label}</button>
+      <button type="button" className="authPrimary" onClick={dockAction}>{label}</button>
     </div>
 
     {modal&&<div className="authBackdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&!pending)setModal(false);}}>

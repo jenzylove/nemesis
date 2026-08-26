@@ -1,6 +1,6 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
-import {onOpenSavedCase} from "./case-bridge";
+import {onOpenSavedCase,onStartInvestigation} from "./case-bridge";
 import {validateEvmAddress,validateTransactionHash} from "./evm-validation.mjs";
 
 type Transfer={log_index:number;token_contract:string;from_address:string;to_address:string;raw_amount:string};
@@ -50,7 +50,7 @@ function Landing({onStart,onDemo}:{onStart:()=>void;onDemo:()=>void}){
   {n:"05",title:"Dormant monitoring",copy:"Keep quiet branches alive in persistent state until new movement appears.",className:"dormantCap",visual:<div className="quietSignal"><i/><i/><i/><i/><i/></div>}
  ];
  return <main className="landing">
-  <nav><Brand/><div className="landingNav"><a href="#system">How it works</a><a href="#intelligence">Intelligence</a><a href="#trust">Trust</a></div><button className="navCta" onClick={onStart} aria-label="Start investigation">Start<b className="ctaWord"> investigation</b> <span>↗</span></button></nav>
+  <nav><Brand/><div className="landingNav"><a href="#system">How it works</a><a href="#intelligence">Intelligence</a><a href="#trust">Trust</a></div></nav>
   <section className="heroScene" aria-label="NEMESIS autonomous crypto incident response">
    <div className="heroOrb orbOne"/><div className="heroOrb orbTwo"/>
    <div className="artifact artifactWallet"><span className="artifactLabel">SUBMITTED WALLET</span><b>Affected wallet</b><div className="walletBalance"><small>STOLEN ASSETS</small><strong>Identified</strong></div><i className="walletPulse"/></div>
@@ -284,6 +284,7 @@ export default function Home(){
  // Reopening from the account dock restores the full investigation: graph,
  // timeline, evidence, branch state and outcome. The case screen fetches its
  // own trace, so only the case record has to travel.
+ useEffect(()=>onStartInvestigation(()=>{setView("intake");if(typeof window!=="undefined")window.scrollTo({top:0});}),[]);
  useEffect(()=>onOpenSavedCase(saved=>{
   const payload=saved as unknown as RealResponse["case"];
   if(!payload?.evidence)return;
