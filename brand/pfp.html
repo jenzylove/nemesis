@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 400px; height: 400px; overflow: hidden; }
+  body {
+    /* X crops avatars to a circle, so the composition has to survive that.
+       A radial lift keeps the centre from reading flat once cropped. */
+    background:
+      radial-gradient(120% 120% at 50% 32%, #16233b 0%, #0A1220 62%, #070d17 100%);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  /* Faint ring echoing the case-panel hairline; sits just inside the crop. */
+  .ring {
+    position: absolute; inset: 26px; border-radius: 50%;
+    border: 1px solid rgba(137, 149, 168, .16);
+  }
+  .glow {
+    position: absolute; width: 300px; height: 300px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(37,99,255,.20) 0%, rgba(37,99,255,0) 68%);
+  }
+  svg { position: relative; width: 252px; display: block; }
+</style>
+</head>
+<body>
+  <div class="ring"></div>
+  <div class="glow"></div>
+  <!-- Same geometry as public/favicon.svg, cropped tight to the artwork so it
+       fills the circle instead of sitting inside the favicon's padding. -->
+  <svg viewBox="5.75 14.75 54.5 34.5" xmlns="http://www.w3.org/2000/svg"
+       role="img" aria-label="NEMESIS">
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.5">
+      <path d="M8 32h13" stroke="#F7F9FC"/>
+      <circle cx="24" cy="32" r="4.5" stroke="#F7F9FC" fill="#0A1220"/>
+      <path d="M28.5 32H33L42 21h8" stroke="#2563FF"/>
+      <path d="M33 32h17" stroke="#2563FF"/>
+      <path d="M28.5 32H33L42 43h8" stroke="#F7F9FC"/>
+      <circle cx="54" cy="21" r="4" stroke="#2563FF" fill="#0A1220"/>
+      <circle cx="54" cy="32" r="4" stroke="#2563FF" fill="#0A1220"/>
+      <circle cx="54" cy="43" r="4" stroke="#F7F9FC" fill="#0A1220"/>
+    </g>
+  </svg>
+</body>
+</html>

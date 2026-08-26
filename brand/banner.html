@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1500px; height: 500px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(90% 150% at 72% 40%, #16233b 0%, #0b1524 45%, #070d17 100%);
+    font-family: Inter, Arial, sans-serif;
+    position: relative;
+  }
+  /* Same hairline grid the case workspace uses. */
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(137,149,168,.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(137,149,168,.055) 1px, transparent 1px);
+    background-size: 50px 50px;
+    mask-image: radial-gradient(80% 100% at 60% 50%, #000 30%, transparent 100%);
+  }
+  /* X drops the avatar over the bottom-left and crops the sides on phones, so
+     the lockup starts well inside both. */
+  .lockup {
+    position: absolute; left: 408px; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 20px;
+  }
+    .word {
+    font-size: 74px; font-weight: 700; letter-spacing: .17em;
+    color: #F7F9FC; line-height: 1;
+  }
+  .tag {
+    font-size: 25px; font-weight: 400; color: #a9b4c6;
+    letter-spacing: .012em;
+  }
+  .rule { width: 96px; height: 2px; background: #2563FF; border-radius: 2px; }
+  .kicker {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 13px; letter-spacing: .30em; color: #6f83a3; text-transform: uppercase;
+  }
+  /* Decorative trace, drawn in the product's own visual language. Abstract on
+     purpose: no addresses, amounts or counts, so it states nothing untrue. */
+  .trace { position: absolute; right: 92px; top: 50%; transform: translateY(-50%); width: 440px; opacity: .92; }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+
+  <svg class="trace" viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <g stroke-linecap="round" stroke-linejoin="round" stroke-width="3.4" opacity=".55">
+      <path d="M14 150h58" stroke="#F7F9FC"/>
+      <path d="M86 150h26l40-52h44" stroke="#2563FF"/>
+      <path d="M112 150h84" stroke="#2563FF"/>
+      <path d="M86 150h26l40 52h44" stroke="#F7F9FC"/>
+      <path d="M210 98h30l34-40h40" stroke="#2563FF" opacity=".8"/>
+      <path d="M210 98h30l34 34h40" stroke="#2563FF" opacity=".45"/>
+      <path d="M210 150h64" stroke="#2563FF" opacity=".55"/>
+      <path d="M210 202h30l34 42h40" stroke="#F7F9FC" opacity=".45"/>
+    </g>
+    <g fill="#0b1524" stroke-width="3.4">
+      <circle cx="79" cy="150" r="9" stroke="#F7F9FC"/>
+      <circle cx="203" cy="98" r="7.5" stroke="#2563FF"/>
+      <circle cx="203" cy="150" r="7.5" stroke="#2563FF"/>
+      <circle cx="203" cy="202" r="7.5" stroke="#F7F9FC"/>
+      <circle cx="322" cy="58" r="6" stroke="#2563FF" opacity=".85"/>
+      <circle cx="322" cy="132" r="6" stroke="#2563FF" opacity=".5"/>
+      <circle cx="281" cy="150" r="6" stroke="#2563FF" opacity=".6"/>
+      <circle cx="322" cy="244" r="6" stroke="#F7F9FC" opacity=".5"/>
+    </g>
+  </svg>
+
+  <div class="lockup">
+    <div class="kicker">Autonomous incident response</div>
+    <div class="word">NEMESIS</div>
+    <div class="rule"></div>
+    <div class="tag">Trace stolen crypto. Evidence first, always.</div>
+  </div>
+</body>
+</html>
