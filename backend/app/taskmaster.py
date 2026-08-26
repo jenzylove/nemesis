@@ -82,13 +82,20 @@ class GooglePubSubPublisher(EventPublisher):
         return self.client.publish(self.client.topic_path(self.project,self.topic),json.dumps(e).encode()).result(timeout=20)
 
 class Taskmaster:
-    def __init__(self,repo,provider,publisher,max_blocks=20,max_depth=8,attribution_provider=None,max_candidates_per_hop=8):
-        self.repo,self.provider,self.publisher,self.max_blocks,self.max_depth=repo,provider,publisher,max_blocks,max_depth;self.max_candidates_per_hop=max(1,max_candidates_per_hop);self.attribution_provider=attribution_provider or CuratedAttributionProvider();self.monitoring_gate=asyncio.Semaphore(2)
+    def __init__(self,repo,provider,publisher,max_blocks=20,max_depth=8,attribution_provider=None,max_candidates_per_hop=8,defer_deep_trace=False):
+        self.repo,self.provider,self.publisher,self.max_blocks,self.max_depth=repo,provider,publisher,max_blocks,max_depth;self.max_candidates_per_hop=max(1,max_candidates_per_hop);self.defer_deep_trace=defer_deep_trace;self.attribution_provider=attribution_provider or CuratedAttributionProvider();self.monitoring_gate=asyncio.Semaphore(2)
     async def trace_initial(self,case_id,evidence:DeterministicEvidence):
         tx=evidence.transaction;wallet=evidence.submitted_wallet.lower();await self._timeline(case_id,"TRACING_FUNDS","Tracing funds",{"transaction_hash":tx.hash});branches=[];now=datetime.now(timezone.utc)
         for i,p in enumerate(self._paths(tx,wallet,None,None)):
             b=TraceBranch(id=stable_id("BR",case_id,tx.hash,i,p["asset"],p["destination"]),case_id=case_id,current_address=p["destination"],chain=tx.chain,asset=p["asset"],amount=p["amount"],status="MOVING",last_transaction=tx.hash,cursor_block=tx.block_number,last_checked=now,evidence_provenance=list(dict.fromkeys(["json_rpc",p["ref"],tx.hash,*p.get("provenance",[])])))
             await self.repo.save_branch(b);await self._transfer_graph(b,wallet,p["destination"],tx,p["ref"],"transfer");await self._timeline(case_id,"BRANCH_CREATED","Branch created",{"branch_id":b.id,"address":b.current_address,"asset":b.asset,"amount":b.amount,"depth":b.depth});branches.append(b)
+        if self.defer_deep_trace and self.publisher:
+            # The first hop is already persisted, so the case can be delivered.
+            # Everything past it continues in the background.
+            for b in branches:
+                await self.publisher.publish({"id":stable_id("EV","drain",b.id,b.cursor_block),"type":"DRAIN_REQUESTED","branch_id":b.id})
+            if branches:await self._timeline(case_id,"DEEP_TRACE_QUEUED","Following the funds beyond the first hop",{"branch_count":len(branches)})
+            return [await self.repo.get_branch(b.id) for b in branches]
         await self._drain(branches);return [await self.repo.get_branch(b.id) for b in branches]
     async def schedule(self):
         bs=await self.repo.list_branches(status="DORMANT")
@@ -99,6 +106,7 @@ class Taskmaster:
         try:
             async with self.monitoring_gate:
                 if e["type"]=="RECHECK_REQUESTED":result=await self.recheck(e["branch_id"])
+                elif e["type"]=="DRAIN_REQUESTED":result=await self.drain_branch(e["branch_id"])
                 elif e["type"]=="TRACE_REQUESTED":result=await self.resume(e["branch_id"],e["transaction_hash"])
                 else:raise ValueError("unsupported event type")
         except Exception:
@@ -106,6 +114,12 @@ class Taskmaster:
             raise
         await self.repo.complete_event(e["id"])
         return result
+    async def drain_branch(self,bid):
+        """Follow one first-hop branch to its terminal state, off the request path."""
+        b=await self.repo.get_branch(bid)
+        if not b or b.status!="MOVING":return {"ignored":True}
+        await self._drain([b])
+        return {"drained":True,"branch_id":bid}
     async def recheck(self,bid):
         b=await self.repo.get_branch(bid)
         if not b or b.status!="DORMANT":return {"ignored":True}

@@ -160,6 +160,10 @@ async def lifespan(_):
         publisher,
         settings.monitoring_max_blocks,
         settings.trace_max_depth,
+        # Deep tracing runs for minutes on a real drain. It continues on the
+        # event path so the case is delivered as soon as its evidence stands
+        # and never depends on the browser holding the request open.
+        defer_deep_trace=True,
     )
     workflow.taskmaster = taskmaster
     yield
