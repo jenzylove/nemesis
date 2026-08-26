@@ -36,3 +36,9 @@
 .stageTrack small{font:500 11px/1.4 Inter,Arial,sans-serif;color:#667085}
 .stageTrack .stageNote{opacity:.72}
 @media(max-width:560px){.graphCompact .node{width:58px;height:32px}}
+
+/* Two ways out of a case: something the victim can read, and the structured
+   package an investigator needs. */
+.evidenceActions{display:flex;gap:8px;flex-wrap:wrap}
+.evidenceActions button.secondary{background:transparent;border:1px solid var(--line);color:inherit;opacity:.86}
+.evidenceActions button.secondary:hover{opacity:1}

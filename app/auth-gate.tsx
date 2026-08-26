@@ -148,12 +148,28 @@ export default function AuthGate(){
   // the way back to their investigations.
   const label=useMemo(()=>user?"My investigations":returning?"Sign in":"Start investigation",[user,returning]);
 
+  // Closing with an investigation waiting must release it, or the intake is left
+  // holding a promise that never settles.
+  function dismiss(){
+    if(pending){
+      pending.reject(new Error("Sign in was cancelled."));
+      setPending(null);
+    }
+    setError("");
+    setModal(false);
+  }
+
+  function openModal(){
+    setError("");
+    setModal(true);
+  }
+
   function dockAction(){
     if(user)return loadCases();
-    if(returning)return setModal(true);
+    if(returning)return openModal();
     // Nothing is listening only if the case screen is unmounted; fall back to
     // sign-in rather than leaving the control dead.
-    if(!requestStartInvestigation())setModal(true);
+    if(!requestStartInvestigation())openModal();
   }
 
   useEffect(()=>{
@@ -181,13 +197,18 @@ export default function AuthGate(){
   useEffect(()=>{
     if(!pending||!user)return;
     let cancelled=false;
+    // The investigation runs for a minute or more. Keeping the modal up until
+    // it returns left the user staring at a dialog whose own close button was
+    // disabled. Authentication is done, so hand back to the page immediately
+    // and let the intake report progress.
+    setModal(false);
     (async()=>{
       try{
         const token=await user.getIdToken();
         const response=await fetch(pending.input,withToken(pending.init,token));
         if(!cancelled)pending.resolve(response);
       }catch(err){if(!cancelled)pending.reject(err);}finally{
-        if(!cancelled){setPending(null);setModal(false);}
+        if(!cancelled)setPending(null);
       }
     })();
     return()=>{cancelled=true;};
@@ -228,7 +249,7 @@ export default function AuthGate(){
   }
 
   async function loadCases(){
-    if(!auth?.currentUser)return setModal(true);
+    if(!auth?.currentUser)return openModal();
     setHistoryOpen(true);setHistoryBusy(true);setError("");
     try{
       const token=await auth.currentUser.getIdToken();
@@ -275,18 +296,18 @@ export default function AuthGate(){
       <button type="button" className="authPrimary" onClick={dockAction}>{label}</button>
     </div>
 
-    {modal&&<div className="authBackdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&!pending)setModal(false);}}>
+    {modal&&<div className="authBackdrop" onMouseDown={e=>{if(e.target===e.currentTarget)dismiss();}}>
       <section className="authModal" role="dialog" aria-modal="true" aria-label="Sign in to NEMESIS">
-        <button className="authClose" type="button" disabled={Boolean(pending)} onClick={()=>setModal(false)}>×</button>
+        <button className="authClose" type="button" aria-label="Close" onClick={dismiss}>×</button>
         <span className="authEyebrow">NEMESIS ACCOUNT</span>
         <h2>{pending?"Continue your investigation":"Welcome back"}</h2>
         <p>{pending?"Sign in to begin tracing this wallet and keep the case available while NEMESIS monitors fund movement.":"Sign in to open your saved investigations and continue monitoring from any device."}</p>
         {!configured&&<div className="authNotice">Sign in is temporarily unavailable. You can still start an investigation once it is back.</div>}
         <button className="authGoogle" type="button" onClick={google} disabled={busy||!configured}>Continue with Google</button>
         <div className="authDivider"><span>or</span></div>
-        <div className="authTabs"><button className={mode==="signin"?"active":""} onClick={()=>setMode("signin")}>Sign in</button><button className={mode==="signup"?"active":""} onClick={()=>setMode("signup")}>Create account</button></div>
-        <input value={email} onChange={e=>setEmail(e.target.value)} type="email" autoComplete="email" placeholder="Email address"/>
-        <input value={password} onChange={e=>setPassword(e.target.value)} type="password" autoComplete={mode==="signup"?"new-password":"current-password"} placeholder="Password"/>
+        <div className="authTabs"><button className={mode==="signin"?"active":""} onClick={()=>{setMode("signin");setError("");}}>Sign in</button><button className={mode==="signup"?"active":""} onClick={()=>{setMode("signup");setError("");}}>Create account</button></div>
+        <input value={email} onChange={e=>{setEmail(e.target.value);if(error)setError("");}} type="email" autoComplete="email" placeholder="Email address"/>
+        <input value={password} onChange={e=>{setPassword(e.target.value);if(error)setError("");}} type="password" autoComplete={mode==="signup"?"new-password":"current-password"} placeholder="Password"/>
         {error&&<div className="authError">{error}</div>}
         <button className="authContinue" type="button" onClick={emailAuth} disabled={busy||!configured}>{busy?"Please wait…":mode==="signup"?"Create account":"Continue"}</button>
       </section>

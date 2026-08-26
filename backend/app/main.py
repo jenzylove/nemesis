@@ -34,6 +34,7 @@ from .progress import (
     describe as describe_progress,
 )
 from .providers import JsonRpcProvider, RpcProviderError
+from .report import render as render_report
 from .repository import repository_from_settings
 from .taskmaster import (
     FirestoreMonitoringRepository,
@@ -330,7 +331,7 @@ async def get_evidence_package(case_id: str, user: dict = Depends(require_user))
     if taskmaster is None:
         raise HTTPException(503, "tracing runtime unavailable")
     trace = await taskmaster.case_trace(case_id)
-    return {
+    package = {
         "schema_version": "1.0",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "case_metadata": {
@@ -362,6 +363,10 @@ async def get_evidence_package(case_id: str, user: dict = Depends(require_user))
         "nemesis_assessment": case.finding.model_dump(mode="json") if case.finding else None,
         "unknowns_and_limitations": case.finding.limitations if case.finding else [case.error or "Model assessment unavailable."],
     }
+    # A victim should be able to read what they downloaded without parsing JSON.
+    # The report restates the package and never adds to it.
+    package["readable_report"] = render_report(package)
+    return package
 
 @app.post("/internal/monitoring/tick", dependencies=[Depends(require_internal)])
 async def monitoring_tick():
