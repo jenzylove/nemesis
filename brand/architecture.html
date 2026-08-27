@@ -7,57 +7,21 @@
   @page { size: 297mm 210mm; margin: 0; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    width: 297mm; height: 210mm; background: #ffffff; color: #0A1220;
-    font-family: Inter, Arial, sans-serif; padding: 13mm 14mm 10mm;
+    width: 1123px; height: 794px; background: #fff; color: #0A1220;
+    font-family: Inter, Arial, sans-serif; padding: 26px 30px 16px;
     display: flex; flex-direction: column;
   }
-  header { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1.5px solid #0A1220; padding-bottom: 7px; }
+  header { display: flex; align-items: flex-start; justify-content: space-between;
+           border-bottom: 1.5px solid #0A1220; padding-bottom: 8px; }
   .lhs { display: flex; align-items: center; gap: 11px; }
-  .lhs svg { width: 46px; display: block; }
-  h1 { font-size: 25px; font-weight: 700; letter-spacing: .15em; }
-  .sub { font-size: 10.5px; color: #4a5568; margin-top: 2px; }
-  .meta { text-align: right; font-family: "JetBrains Mono", monospace; font-size: 8.4px; color: #5a6678; line-height: 1.65; }
+  .lhs svg { width: 44px; display: block; }
+  h1 { font-size: 23px; font-weight: 700; letter-spacing: .15em; }
+  .sub { font-size: 10px; color: #4a5568; margin-top: 2px; }
+  .meta { text-align: right; font-family: "JetBrains Mono", monospace; font-size: 8px; color: #5a6678; line-height: 1.7; }
   .meta b { color: #0A1220; font-weight: 500; }
-
-  .stage { flex: 1; display: flex; gap: 9px; margin-top: 9px; min-height: 0; }
-  .col { flex: 1; display: flex; flex-direction: column; border: 1.2px solid #d5dae2; border-radius: 6px; overflow: hidden; }
-  .col > h2 {
-    font-family: "JetBrains Mono", monospace; font-size: 8px; letter-spacing: .17em;
-    padding: 6px 9px; color: #fff; font-weight: 500; text-transform: uppercase;
-  }
-  .c1 > h2 { background: #0A1220; }
-  .c2 > h2 { background: #2563FF; }
-  .c3 > h2 { background: #1c7a54; }
-  .col .note { font-size: 7.8px; color: #5a6678; padding: 5px 8px 0; line-height: 1.4; }
-  .body { padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 4.5px; flex: 1; }
-
-  .node {
-    border: 1.1px solid #c9d0da; border-radius: 5px; padding: 5px 7px; background: #fbfcfe;
-  }
-  .node .t { font-size: 9.3px; font-weight: 600; line-height: 1.22; }
-  .node .d { font-size: 7.5px; color: #5a6678; margin-top: 2px; line-height: 1.32; }
-  .node.gc { border-color: #2563FF; background: #f2f6ff; }
-  .node.ext { border-style: dashed; background: #fff; }
-  .node.store { border-color: #0A1220; background: #eef1f6; }
-  .arrow { text-align: center; color: #98a2b3; font-size: 9px; line-height: .6; }
-  .tag {
-    display: inline-block; font-family: "JetBrains Mono", monospace; font-size: 6.6px;
-    letter-spacing: .07em; padding: 1.5px 4px; border-radius: 3px; margin-top: 3px;
-    background: #e8edf5; color: #3f4c60;
-  }
-  .tag.g { background: #e4edff; color: #1846c4; }
-
-  .band { margin-top: 8px; border: 1.2px solid #d5dae2; border-radius: 6px; padding: 8px 10px; }
-  .band h3 { font-family: "JetBrains Mono", monospace; font-size: 7.6px; letter-spacing: .17em; color: #0A1220; margin-bottom: 6px; }
-  .tiers { display: flex; gap: 8px; }
-  .tier { flex: 1; border-left: 2.5px solid #0A1220; padding-left: 7px; }
-  .tier.a { border-color: #0A1220; }
-  .tier.b { border-color: #2563FF; }
-  .tier.c { border-color: #98a2b3; }
-  .tier .k { font-size: 9px; font-weight: 600; }
-  .tier .v { font-size: 7.9px; color: #5a6678; line-height: 1.4; margin-top: 2px; }
-
-  footer { margin-top: 7px; display: flex; justify-content: space-between; font-family: "JetBrains Mono", monospace; font-size: 7.4px; color: #5a6678; }
+  #canvas { flex: 1; margin-top: 4px; }
+  footer { display: flex; justify-content: space-between; font-family: "JetBrains Mono", monospace;
+           font-size: 7.4px; color: #5a6678; padding-top: 6px; border-top: 1px solid #e3e7ee; }
 </style>
 </head>
 <body>
@@ -65,103 +29,181 @@
     <div class="lhs">
       <svg viewBox="5.75 14.75 54.5 34.5" xmlns="http://www.w3.org/2000/svg">
         <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.5">
-          <path d="M8 32h13" stroke="#0A1220"/>
-          <circle cx="24" cy="32" r="4.5" stroke="#0A1220" fill="#fff"/>
-          <path d="M28.5 32H33L42 21h8" stroke="#2563FF"/>
-          <path d="M33 32h17" stroke="#2563FF"/>
+          <path d="M8 32h13" stroke="#0A1220"/><circle cx="24" cy="32" r="4.5" stroke="#0A1220" fill="#fff"/>
+          <path d="M28.5 32H33L42 21h8" stroke="#2563FF"/><path d="M33 32h17" stroke="#2563FF"/>
           <path d="M28.5 32H33L42 43h8" stroke="#0A1220"/>
           <circle cx="54" cy="21" r="4" stroke="#2563FF" fill="#fff"/>
           <circle cx="54" cy="32" r="4" stroke="#2563FF" fill="#fff"/>
           <circle cx="54" cy="43" r="4" stroke="#0A1220" fill="#fff"/>
         </g>
       </svg>
-      <div>
-        <h1>NEMESIS</h1>
-        <div class="sub">Autonomous crypto incident response · system architecture</div>
-      </div>
+      <div><h1>NEMESIS</h1><div class="sub">Autonomous crypto incident response · system architecture</div></div>
     </div>
     <div class="meta">
-      <div><b>Google Cloud</b> · Cloud Run · Firestore · Pub/Sub · Cloud Scheduler</div>
-      <div>Secret Manager · Vertex AI · Firebase Authentication</div>
       <div><b>Agent</b> Google ADK + Gemini 3.5 Flash on Vertex AI</div>
+      <div><b>Runtime</b> Cloud Run · Firestore · Pub/Sub · Cloud Scheduler · Secret Manager</div>
+      <div>Region us-central1 · project nemesis-506114</div>
     </div>
   </header>
 
-  <div class="stage">
-
-    <!-- 1 ------------------------------------------------------------ -->
-    <section class="col c1">
-      <h2>1 · Request path — case returned in ~50s</h2>
-      <div class="note">The victim submits a wallet. Nothing else is required: no transaction hash, no chain, no incident time.</div>
-      <div class="body">
-        <div class="node"><div class="t">Victim submits a wallet</div><div class="d">Next.js web app on Cloud Run</div><span class="tag">CLOUD RUN</span></div>
-        <div class="arrow">▼</div>
-        <div class="node gc"><div class="t">Firebase Authentication</div><div class="d">ID token minted; every case is owner-scoped and cross-user access is denied</div><span class="tag g">FIREBASE AUTH</span></div>
-        <div class="arrow">▼</div>
-        <div class="node gc"><div class="t">FastAPI incident runtime</div><div class="d">Verifies the token, then owns the investigation</div><span class="tag g">CLOUD RUN</span></div>
-        <div class="arrow">▼</div>
-        <div class="node ext"><div class="t">Incident discovery</div><div class="d">Indexed wallet history returns every candidate outflow</div><span class="tag">ALCHEMY</span></div>
-        <div class="arrow">▼</div>
-        <div class="node"><div class="t">Candidate ranking</div><div class="d">Scores candidates and refuses to guess below 0.70 confidence, returning ranked finalists instead</div></div>
-        <div class="arrow">▼</div>
-        <div class="node ext"><div class="t">Deterministic verification</div><div class="d">The selected transaction is re-proved against the chain before anything is claimed</div><span class="tag">ETHEREUM + BASE JSON-RPC</span></div>
-        <div class="arrow">▼</div>
-        <div class="node gc"><div class="t">Compromise assessment</div><div class="d">Reads only verified evidence. Output is rejected if it attributes an entity the evidence cannot support</div><span class="tag g">VERTEX AI · GEMINI 3.5 · ADK</span></div>
-      </div>
-    </section>
-
-    <!-- 2 ------------------------------------------------------------ -->
-    <section class="col c2">
-      <h2>2 · Deep trace — off the request path</h2>
-      <div class="note">Tracing a real drain runs for minutes, so it never blocks the response. The case is delivered as soon as its evidence stands.</div>
-      <div class="body">
-        <div class="node gc"><div class="t">DRAIN_REQUESTED published</div><div class="d">One event per first-hop branch</div><span class="tag g">PUB/SUB</span></div>
-        <div class="arrow">▼</div>
-        <div class="node gc"><div class="t">Push subscription</div><div class="d">Delivered back to the runtime over an authenticated internal endpoint</div><span class="tag g">PUB/SUB → CLOUD RUN</span></div>
-        <div class="arrow">▼</div>
-        <div class="node"><div class="t">Trace engine</div><div class="d">Follows the funds hop by hop to depth 8: splits, residuals, swaps and bridges, with cross-chain continuation where the evidence resolves</div></div>
-        <div class="arrow">▼</div>
-        <div class="node"><div class="t">Indexed continuation</div><div class="d">A receipt cannot encode a contract-forwarded internal transfer. The index reveals it; RPC still proves the transaction</div><span class="tag">ALCHEMY + RPC VERIFY</span></div>
-        <div class="arrow">▼</div>
-        <div class="node"><div class="t">Destination attribution</div><div class="d">Vendored OFAC sanctions registry and curated bridge contracts, each carrying its own source</div></div>
-        <div class="arrow">▼</div>
-        <div class="node store"><div class="t">Firestore</div><div class="d">Cases, branches, fund graph, timeline, processed events. Event claims are atomic, so redelivery cannot double-trace</div><span class="tag">FIRESTORE</span></div>
-      </div>
-    </section>
-
-    <!-- 3 ------------------------------------------------------------ -->
-    <section class="col c3">
-      <h2>3 · Autonomous monitoring — no human in the loop</h2>
-      <div class="note">Stolen funds sit still, then move. A dormant branch is not a finished one, so the agent keeps watching after the user has gone.</div>
-      <div class="body">
-        <div class="node gc"><div class="t">Cloud Scheduler</div><div class="d">Fires every five minutes against an authenticated internal endpoint</div><span class="tag g">*/5 * * * *</span></div>
-        <div class="arrow">▼</div>
-        <div class="node"><div class="t">Dormant branch recheck</div><div class="d">Every branch awaiting movement is re-queued for inspection</div></div>
-        <div class="arrow">▼</div>
-        <div class="node"><div class="t">Movement detection</div><div class="d">Indexed history for settled blocks, realtime stream for recent ones, and RPC verifies either before it counts</div><span class="tag">ALCHEMY · BITQUERY · RPC</span></div>
-        <div class="arrow">▼</div>
-        <div class="node gc"><div class="t">Trace resumed automatically</div><div class="d">Confirmed movement re-enters the trace engine through Pub/Sub. The graph, timeline and outcome update without anyone asking</div><span class="tag g">PUB/SUB</span></div>
-        <div class="arrow">▼</div>
-        <div class="node"><div class="t">Outcome and evidence package</div><div class="d">Where the funds are, how much is unresolved, what is actionable, and what the victim can do next</div></div>
-        <div class="arrow">▼</div>
-        <div class="node ext"><div class="t">Failure is reported as failure</div><div class="d">A provider outage terminates a branch as evidence-retrieval-failed. It is never allowed to look like a finding about where funds are</div></div>
-      </div>
-    </section>
-  </div>
-
-  <div class="band">
-    <h3>EVIDENCE BOUNDARY — enforced in the data model, not in wording</h3>
-    <div class="tiers">
-      <div class="tier a"><div class="k">Deterministic facts</div><div class="v">Transactions, transfers, amounts, branch paths and attribution sources. Proved against the chain and stored before any model runs.</div></div>
-      <div class="tier b"><div class="k">NEMESIS assessment</div><div class="v">Gemini's reading of the compromise, carried separately with its own confidence and rejected if it names an entity the evidence cannot support.</div></div>
-      <div class="tier c"><div class="k">Unknown and unresolved</div><div class="v">Stated plainly. NEMESIS cannot freeze funds, recover funds, obtain account-holder identity, or compel any exchange or authority to act.</div></div>
-    </div>
-  </div>
+  <svg id="canvas" viewBox="0 0 1063 636" xmlns="http://www.w3.org/2000/svg"></svg>
 
   <footer>
     <div>github.com/jenzylove/nemesis</div>
-    <div>Region us-central1 · project nemesis-506114</div>
-    <div>Live: nemesis-web-h7bnd6kzfq-uc.a.run.app · build 23b3157</div>
+    <div>Live: nemesis-web-h7bnd6kzfq-uc.a.run.app</div>
+    <div>build 374d60d</div>
   </footer>
+
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('canvas');
+const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+
+const ZONES = [
+  {x:6,   y:44,  w:150, h:110, label:'CLIENT',            color:'#6b7688'},
+  {x:176, y:10,  w:600, h:492, label:'GOOGLE CLOUD',      color:'#2563FF'},
+  {x:800, y:70,  w:255, h:300, label:'EXTERNAL EVIDENCE', color:'#8a94a6'},
+];
+
+const N = {
+  victim : {x:18,  y:74,  w:126, h:54, t:'Victim',             d:'submits a wallet',                   kind:'plain'},
+  web    : {x:194, y:74,  w:150, h:54, t:'Web app',            d:'Next.js · Cloud Run',                kind:'gc'},
+  auth   : {x:194, y:166, w:150, h:50, t:'Firebase Auth',      d:'ID token · owner scope',             kind:'gc'},
+  secret : {x:194, y:252, w:150, h:46, t:'Secret Manager',     d:'provider credentials',               kind:'gc'},
+  api    : {x:400, y:68,  w:186, h:66, t:'Incident runtime',   d:'FastAPI · Cloud Run',                kind:'hero'},
+  gemini : {x:400, y:172, w:186, h:52, t:'Gemini 3.5 · ADK',   d:'Vertex AI',                          kind:'gc'},
+  trace  : {x:400, y:262, w:186, h:60, t:'Trace engine',       d:'depth 8 · splits · swaps · bridges', kind:'hero'},
+  monitor: {x:400, y:404, w:186, h:56, t:'Dormant monitoring', d:'recheck · detect · resume',          kind:'gc'},
+  store  : {x:634, y:68,  w:128, h:66, t:'Firestore',          d:'cases · branches|graph · timeline',  kind:'gc'},
+  bus    : {x:634, y:262, w:128, h:56, t:'Pub/Sub',            d:'nemesis-case-events',                kind:'gc'},
+  sched  : {x:634, y:404, w:128, h:56, t:'Cloud Scheduler',    d:'*/5 * * * *',                        kind:'gc'},
+  prov   : {x:816, y:98,  w:222, h:252, t:'',                  d:'',                                   kind:'ext'},
+};
+
+const PROV = [
+  ['Alchemy',             'indexed wallet history|internal transfers'],
+  ['Ethereum + Base RPC', 'deterministic proof of|every transaction used'],
+  ['Bitquery',            'realtime movement on|recent blocks'],
+  ['GoPlus · Chainabuse', 'risk and abuse enrichment'],
+];
+
+const E = [
+  {a:'victim',  b:'web',     s:'r', e:'l', r:'d'},
+  {a:'web',     b:'api',     s:'r', e:'l', r:'d', l:'wallet + token'},
+  {a:'auth',    b:'web',     s:'t', e:'b', r:'d', l:'sign in', dash:1},
+  {a:'auth',    b:'api',     s:'r', e:'b', r:'v', l:'verify', dash:1},
+  {a:'secret',  b:'trace',   s:'r', e:'l', r:'d', dash:1},
+  {a:'api',     b:'prov',    s:'t', e:'t', r:'over', l:'discover · verify · enrich'},
+  {a:'api',     b:'gemini',  s:'b', e:'t', r:'d', l:'verified evidence only'},
+  {a:'api',     b:'store',   s:'r', e:'l', r:'d', l:'persist'},
+  {a:'api',     b:'bus',     s:'r', e:'t', r:'h', l:'DRAIN_REQUESTED', blue:1},
+  {a:'bus',     b:'trace',   s:'l', e:'r', r:'d', l:'push', blue:1},
+  {a:'trace',   b:'prov',    s:'b', e:'b', r:'under', l:'continue trace · detect movement'},
+  {a:'trace',   b:'store',   s:'r', e:'b', r:'v', l:'branches · graph'},
+  {a:'sched',   b:'monitor', s:'l', e:'r', r:'d', l:'tick'},
+  {a:'store',   b:'monitor', s:'b', e:'t', r:'far', l:'dormant branches'},
+  {a:'monitor', b:'bus',     s:'r', e:'b', r:'v', l:'movement → resume', blue:1},
+  {a:'store',   b:'web',     s:'t', e:'t', r:'top', l:'case · live trace · evidence package'},
+];
+
+const defs = el('defs');
+for (const [id, c] of [['ah','#8a94a6'], ['ahb','#2563FF']]) {
+  const m = el('marker', {id, viewBox:'0 0 10 10', refX:'8.5', refY:'5', markerWidth:'6.5',
+                          markerHeight:'6.5', orient:'auto-start-reverse'});
+  m.appendChild(el('path', {d:'M0 0L10 5L0 10z', fill:c}));
+  defs.appendChild(m);
+}
+svg.appendChild(defs);
+
+for (const z of ZONES) {
+  svg.appendChild(el('rect', {x:z.x, y:z.y, width:z.w, height:z.h, rx:10, fill:'none',
+    stroke:z.color, 'stroke-width':1.1, 'stroke-dasharray':'5 4', opacity:.5}));
+  const t = el('text', {x:z.x+11, y:z.y+15, fill:z.color, 'font-size':7.6,
+    'font-family':'JetBrains Mono, monospace', 'letter-spacing':'1.7'});
+  t.textContent = z.label; svg.appendChild(t);
+}
+
+const anchor = (n, side) => ({
+  l:[n.x, n.y+n.h/2], r:[n.x+n.w, n.y+n.h/2],
+  t:[n.x+n.w/2, n.y],  b:[n.x+n.w/2, n.y+n.h],
+}[side]);
+
+function route(edge) {
+  const A = N[edge.a], B = N[edge.b];
+  const [ax, ay] = anchor(A, edge.s), [bx, by] = anchor(B, edge.e);
+  if (edge.r === 'd')   return [`M${ax} ${ay}L${bx} ${by}`, (ax+bx)/2, (ay+by)/2 - 4];
+  if (edge.r === 'h')   { const mx = (ax+bx)/2; return [`M${ax} ${ay}H${mx}V${by}H${bx}`, mx, (ay+by)/2]; }
+  if (edge.r === 'over') { const y = 48;  return [`M${ax} ${ay}V${y}H${bx}V${by}`, (ax+bx)/2, y-4]; }
+  if (edge.r === 'under'){ const y = 378; return [`M${ax} ${ay}V${y}H${bx}V${by}`, (ax+bx)/2, y+11]; }
+  if (edge.r === 'v')   { const my = (ay+by)/2; return [`M${ax} ${ay}V${my}H${bx}V${by}`, (ax+bx)/2, my-4]; }
+  if (edge.r === 'far') { const x = B.x + B.w + 26; return [`M${ax} ${ay}V${by-34}H${bx}V${by}`, bx+52, by-38]; }
+  if (edge.r === 'top') { const y = 20; return [`M${ax} ${ay}V${y}H${bx}V${by}`, (ax+bx)/2, y-4]; }
+}
+
+const labels = [];
+for (const edge of E) {
+  const [d, lx, ly] = route(edge);
+  svg.appendChild(el('path', {d, fill:'none', stroke: edge.blue ? '#2563FF' : '#8a94a6',
+    'stroke-width': edge.blue ? 1.6 : 1.2, 'stroke-dasharray': edge.dash ? '3 3' : '',
+    'marker-end': `url(#${edge.blue ? 'ahb' : 'ah'})`}));
+  if (edge.l) labels.push([edge, lx, ly]);
+}
+
+for (const k in N) {
+  const n = N[k];
+  const fill   = {hero:'#eaf0ff', gc:'#f6f9ff', ext:'#fbfcfe', plain:'#f4f6f9'}[n.kind];
+  const stroke = {hero:'#2563FF', gc:'#9ab5f7', ext:'#c3cad6', plain:'#aab3c0'}[n.kind];
+  svg.appendChild(el('rect', {x:n.x, y:n.y, width:n.w, height:n.h, rx:6, fill, stroke,
+    'stroke-width': n.kind==='hero' ? 1.9 : 1.1}));
+  if (!n.t) continue;
+  const title = el('text', {x:n.x+11, y:n.y+(n.d ? 21 : n.h/2+3.5), fill:'#0A1220',
+    'font-size': n.kind==='hero' ? 11 : 9.8, 'font-weight':600});
+  title.textContent = n.t; svg.appendChild(title);
+  (n.d ? n.d.split('|') : []).forEach((line, i) => {
+    const s = el('text', {x:n.x+11, y:n.y+35+i*10, fill:'#5a6678', 'font-size':7.7});
+    s.textContent = line; svg.appendChild(s);
+  });
+}
+
+const head = el('text', {x:N.prov.x+14, y:N.prov.y+20, fill:'#0A1220', 'font-size':9.8, 'font-weight':600});
+head.textContent = 'Evidence providers'; svg.appendChild(head);
+PROV.forEach(([name, desc], i) => {
+  const y = N.prov.y + 48 + i*52;
+  svg.appendChild(el('line', {x1:N.prov.x+13, y1:y-13, x2:N.prov.x+N.prov.w-13, y2:y-13,
+    stroke:'#e6eaf1', 'stroke-width':1}));
+  const t = el('text', {x:N.prov.x+14, y:y+2, fill:'#0A1220', 'font-size':8.8, 'font-weight':600});
+  t.textContent = name; svg.appendChild(t);
+  desc.split('|').forEach((line, j) => {
+    const s = el('text', {x:N.prov.x+14, y:y+14+j*9.6, fill:'#5a6678', 'font-size':7.3});
+    s.textContent = line; svg.appendChild(s);
+  });
+});
+
+for (const [edge, lx, ly] of labels) {
+  const bg = el('rect', {fill:'#fff', rx:2});
+  const t = el('text', {x:lx, y:ly, fill: edge.blue ? '#1846c4' : '#5a6678', 'font-size':7.3,
+    'text-anchor':'middle', 'font-family':'Inter', 'font-weight': edge.blue ? 500 : 400});
+  t.textContent = edge.l;
+  svg.appendChild(bg); svg.appendChild(t);
+  const b = t.getBBox();
+  bg.setAttribute('x', b.x-3); bg.setAttribute('y', b.y-1);
+  bg.setAttribute('width', b.width+6); bg.setAttribute('height', b.height+2);
+}
+
+const note = [
+  ['EVIDENCE BOUNDARY', '#0A1220'],
+  ['Chain facts are proved and persisted before any model runs.', '#5a6678'],
+  ['The assessment is carried separately with its own confidence, and is', '#5a6678'],
+  ['rejected if it names an entity the evidence cannot support.', '#5a6678'],
+  ['A provider outage is recorded as retrieval failure, never as a finding', '#5a6678'],
+  ['about where the funds are.', '#5a6678'],
+];
+note.forEach(([line, fill], i) => {
+  const t = el('text', {x:8, y:540+i*13.5, fill, 'font-size': i ? 7.8 : 7.6,
+    'font-family': i ? 'Inter' : 'JetBrains Mono, monospace',
+    'letter-spacing': i ? 0 : 1.6, 'font-weight': i ? 400 : 500});
+  t.textContent = line; svg.appendChild(t);
+});
+</script>
 </body>
 </html>
