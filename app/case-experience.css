@@ -42,3 +42,6 @@
 .evidenceActions{display:flex;gap:8px;flex-wrap:wrap}
 .evidenceActions button.secondary{background:transparent;border:1px solid var(--line);color:inherit;opacity:.86}
 .evidenceActions button.secondary:hover{opacity:1}
+
+/* A published case is read-only, and says so where the download would be. */
+.publicNote{font-size:11px;color:#8995a8;line-height:1.5;margin-top:6px}

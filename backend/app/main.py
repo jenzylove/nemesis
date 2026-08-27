@@ -137,6 +137,31 @@ async def owned_case(case_id: str, user: dict):
     return case
 
 
+
+# Fields that identify the account behind an investigation. A published case is
+# evidence about a wallet, never about the person who submitted it.
+PRIVATE_CASE_FIELDS = ("owner_user_id", "owner_email")
+
+
+async def published_case(case_id: str):
+    """A case the owner has published, or 404.
+
+    Anything not explicitly published is indistinguishable from a case that
+    does not exist, so this endpoint cannot be used to probe for private ones.
+    """
+    case = await repository.get(case_id)
+    if not case or not getattr(case, "is_public_case", False):
+        raise HTTPException(404, "case not found")
+    return case
+
+
+def redact(case) -> dict:
+    payload = case.model_dump(mode="json")
+    for field in PRIVATE_CASE_FIELDS:
+        payload.pop(field, None)
+    return payload
+
+
 class DormantRequest(BaseModel):
     case_id: str = Field(min_length=4, max_length=80)
     chain: ChainName
@@ -323,6 +348,24 @@ async def get_trace(case_id: str, user: dict = Depends(require_user)):
     trace["case_state"] = state
     return trace
 
+
+
+@app.get("/v1/public/cases/{case_id}")
+async def get_public_case(case_id: str):
+    """Read-only view of a published case. No authentication, no owner data."""
+    return redact(await published_case(case_id))
+
+
+@app.get("/v1/public/cases/{case_id}/trace")
+async def get_public_trace(case_id: str):
+    case = await published_case(case_id)
+    if taskmaster is None:
+        raise HTTPException(503, "tracing runtime unavailable")
+    trace = await taskmaster.case_trace(case_id)
+    trace["asset_totals"] = asset_totals(case, trace)
+    trace["outcome"] = build_outcome(trace["asset_totals"], trace)
+    trace["case_state"] = derive_case_state(trace["branches"], case.state)
+    return trace
 
 
 @app.get("/v1/cases/{case_id}/evidence-package")

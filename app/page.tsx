@@ -250,23 +250,23 @@ function RealGraph({data,trace}:{data:RealResponse;trace:TraceState|null}){
  const graphNodes=[{label:"SUBMITTED WALLET",sub:short(data.case.wallet_address),x:8,type:"victim"},{label:"TRANSACTION FROM",sub:short(tx.from_address),x:35,type:"process"},{label:tx.to_address?"TRANSACTION TO":"CONTRACT CREATED",sub:short(tx.to_address),x:63,type:tx.status==="success"?"process":"bad"},{label:"RPC VERIFIED",sub:`block ${tx.block_number}`,x:88,type:"good"}];return <div className="graph realGraph"><div className="graphGrid"/><svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="12" y1="45" x2="39" y2="45"/><line x1="39" y1="45" x2="67" y2="45"/><line x1="67" y1="45" x2="92" y2="45"/></svg>{graphNodes.map(n=><div key={n.label} className={`node ${n.type}`} style={{left:`${n.x}%`,top:"45%"}}><span>{n.label}</span><small>{n.sub}</small></div>)}</div>
 }
 
-function RealCaseScreen({data,onExit,onHome}:{data:RealResponse;onExit:()=>void;onHome:()=>void}){
+function RealCaseScreen({data,onExit,onHome,isPublic=false}:{data:RealResponse;onExit:()=>void;onHome:()=>void;isPublic?:boolean}){
  const c=data.case,tx=c.evidence!.transaction,f=c.finding||{classification:"agent unavailable",summary:c.error||"Deterministic evidence was stored, but Gemini classification is not available.",confidence:0,compromise_mechanism_confidence:null,evidence_references:[],limitations:["Gemini classification requires configured Google credentials."]};
- const[trace,setTrace]=useState<TraceState|null>(null);useEffect(()=>{let active=true,busy=false;const api=process.env.NEXT_PUBLIC_NEMESIS_API_URL?.replace(/\/$/,"");async function refresh(){if(!api||busy)return;busy=true;const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10000);try{const r=await fetch(`${api}/v1/cases/${c.id}/trace`,{signal:controller.signal});if(r.ok&&active)setTrace(await r.json())}catch{}finally{clearTimeout(timeout);busy=false}}refresh();const id=setInterval(refresh,5000);return()=>{active=false;clearInterval(id)}},[c.id]);
+ const[trace,setTrace]=useState<TraceState|null>(null);useEffect(()=>{let active=true,busy=false;const api=process.env.NEXT_PUBLIC_NEMESIS_API_URL?.replace(/\/$/,"");async function refresh(){if(!api||busy)return;busy=true;const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10000);try{const r=await fetch(`${api}${isPublic?"/v1/public":"/v1"}/cases/${c.id}/trace`,{signal:controller.signal});if(r.ok&&active)setTrace(await r.json())}catch{}finally{clearTimeout(timeout);busy=false}}refresh();const id=setInterval(refresh,5000);return()=>{active=false;clearInterval(id)}},[c.id,isPublic]);
  const save=(name:string,body:string,type:string)=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([body],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href)};
  // The package is for an investigator or a fraud desk; the report is the same
  // evidence in a form the victim can read without parsing it.
  const exportEvidence=async(kind:"report"|"package")=>{const api=process.env.NEXT_PUBLIC_NEMESIS_API_URL?.replace(/\/$/,"");if(!api)return;const response=await fetch(`${api}/v1/cases/${c.id}/evidence-package`);if(!response.ok)return;const payload=await response.json();
   if(kind==="report"&&payload.readable_report)save(`${c.id}-incident-report.txt`,payload.readable_report,"text/plain");
   else save(`${c.id}-evidence-package.json`,JSON.stringify(payload,null,2),"application/json")};
- return <Shell onExit={onExit} onHome={onHome} monitor={!!trace?.branches.some(b=>b.status==="DORMANT")}>{section=><section className="caseMain"><header><div><div className="eyebrow">CASE {c.id}</div><h2>Incident investigation</h2></div><div className={`status ${tx.status==="success"?"actionable":"dormant"}`}><i/>{trace?.case_state||c.state}</div></header><div className="metrics"><div><small>CHAIN</small><strong>{c.chain.toUpperCase()}</strong><span>RPC verified</span></div><div><small>TRANSACTION STATUS</small><strong className="accent">{tx.status.toUpperCase()}</strong><span>{c.discovery?"Discovered + RPC confirmed":"Receipt confirmed"}</span></div><div><small>TRACE BRANCHES</small><strong>{trace?.branches.length||0}</strong><span>{trace?.branches.filter(b=>b.status==="DORMANT").length||0} monitored</span></div><div><small>ASSET TRANSFERS</small><strong>{tx.erc20_transfers.length+(tx.nft_transfers?.length||0)}</strong><span>{tx.nft_transfers?.length?`${tx.nft_transfers.length} NFT · tracing limited`:`${tx.erc20_transfers.length} ERC20 decoded`}</span></div></div><div className="workspace" style={section==="overview"?undefined:{gridTemplateColumns:"1fr"}}>
+ return <Shell onExit={onExit} onHome={onHome} monitor={!!trace?.branches.some(b=>b.status==="DORMANT")}>{section=><section className="caseMain"><header><div><div className="eyebrow">{isPublic?"PUBLISHED CASE · READ ONLY":"CASE"} {c.id}</div><h2>Incident investigation</h2></div><div className={`status ${tx.status==="success"?"actionable":"dormant"}`}><i/>{trace?.case_state||c.state}</div></header><div className="metrics"><div><small>CHAIN</small><strong>{c.chain.toUpperCase()}</strong><span>RPC verified</span></div><div><small>TRANSACTION STATUS</small><strong className="accent">{tx.status.toUpperCase()}</strong><span>{c.discovery?"Discovered + RPC confirmed":"Receipt confirmed"}</span></div><div><small>TRACE BRANCHES</small><strong>{trace?.branches.length||0}</strong><span>{trace?.branches.filter(b=>b.status==="DORMANT").length||0} monitored</span></div><div><small>ASSET TRANSFERS</small><strong>{tx.erc20_transfers.length+(tx.nft_transfers?.length||0)}</strong><span>{tx.nft_transfers?.length?`${tx.nft_transfers.length} NFT · tracing limited`:`${tx.erc20_transfers.length} ERC20 decoded`}</span></div></div><div className="workspace" style={section==="overview"?undefined:{gridTemplateColumns:"1fr"}}>
   {(section==="overview"||section==="graph")&&<section className="panel graphPanel"><div className="panelHead"><div><span>LIVE FUND GRAPH</span><small>{trace?.branches.some(b=>b.status==="MOVING")?" TRACING IN PROGRESS":" PERSISTED RPC EVIDENCE"}</small></div></div><RealGraph data={data} trace={trace}/></section>}
   {(section==="overview"||section==="timeline")&&<section className="panel activity realActivity"><div className="panelHead"><span>TASKMASTER ACTIVITY</span><small>LIVE</small></div><div className="now"><i/><div><b>{trace?.timeline.at(-1)?.message||"Tracing funds"}</b><span>Persisted backend events</span></div></div><div className="timeline">{(trace?.timeline||[]).slice().reverse().map(e=><div key={e.id}><time>{new Date(e.created_at).toLocaleTimeString()}</time><i/><p><b>{e.message}</b><span>{e.type.replaceAll("_"," ")}</span></p></div>)}</div></section>}
 <section className="panel diagnosis"><div className="panelHead"><span>INCIDENT SELECTION</span><small>{c.discovery?`${Math.round(c.discovery.incident_selection_confidence*100)}% CONFIDENCE`:"USER SUPPLIED"}</small></div><h3>{c.discovery?"Incident identified":"Transaction supplied by investigator"}</h3><p>{c.discovery?.candidates[0]?.reasons.slice(0,4).join(" · ")||"The supplied transaction was independently verified against RPC evidence."}</p></section>
   {(section==="overview"||section==="evidence")&&<section className="panel diagnosis"><div className="panelHead"><span>COMPROMISE MECHANISM</span><small>{Math.round((f.compromise_mechanism_confidence??f.confidence)*100)}% CONFIDENCE</small></div><h3>{f.classification.replaceAll("_"," ")}</h3><p>{f.summary}</p><div className="evidenceRows"><span>Submitted wallet <b>{short(c.wallet_address)}</b></span><span>Transaction <b>{short(tx.hash)}</b></span><span>From <b>{short(tx.from_address)}</b></span><span>To <b>{short(tx.to_address)}</b></span>{c.discovery&&<span>Incident discovery <b>{c.discovery.source.toUpperCase()} · {c.discovery.candidate_count} candidates</b></span>}</div>{f.limitations.length>0&&<small className="caution">{f.limitations.join(" · ")}</small>}</section>}
   {section==="overview"&&<section className="panel destination"><div className="panelHead"><span>TRACE BRANCHES</span><small>{trace?.branches.length||0} FOUND</small></div>{trace?.branches.length?<div className="transferList">{trace.branches.map(b=><div key={b.id}><span>{b.status}</span><b>{short(b.current_address)}</b><small>{short(b.asset)} · raw amount {b.amount}</small></div>)}</div>:<div className="emptyTrace">No qualifying outgoing fund path was present.</div>}</section>}
   {section==="overview"&&trace?.outcome&&<section className="panel destination"><div className="panelHead"><span>CURRENT OUTCOME</span><small>DETERMINISTIC STATE</small></div><h3>{trace.outcome.summary}</h3><div className="transferList">{trace.outcome.asset_totals.map(total=><div key={total.asset}><span>{short(total.asset)} · RAW UNITS</span><b>Stolen {total.stolen} · Located {total.located} · Unresolved {total.unresolved}</b></div>)}</div><div className="evidenceRows">{Object.entries(trace.outcome.branch_counts).filter(([,count])=>count>0).map(([status,count])=><span key={status}>{status.toUpperCase()} <b>{count}</b></span>)}</div><h3>What you can do now</h3><p>{trace.outcome.next_actions.join(" · ")}</p><small className="caution">{trace.outcome.limitations.join(" · ")}</small></section>}
-  {(section==="overview"||section==="evidence")&&<section className="panel escalation"><div className="panelHead"><span>DETERMINISTIC EVIDENCE</span><small>STORED</small></div><div className="packageIcon">▤</div><div><h3>Normalized transaction package</h3><p>A readable incident report for you, and the full structured package for an investigator or exchange. Verified facts, assessment and unknowns stay separated in both.</p></div><div className="evidenceActions"><button onClick={()=>exportEvidence("report")}>Download incident report</button><button className="secondary" onClick={()=>exportEvidence("package")}>Evidence package (JSON)</button></div></section>}
+  {(section==="overview"||section==="evidence")&&<section className="panel escalation"><div className="panelHead"><span>DETERMINISTIC EVIDENCE</span><small>STORED</small></div><div className="packageIcon">▤</div><div><h3>Normalized transaction package</h3><p>A readable incident report for you, and the full structured package for an investigator or exchange. Verified facts, assessment and unknowns stay separated in both.</p></div>{isPublic?<p className="publicNote">This is a published case, shown read-only. The evidence package stays with the account that opened the investigation.</p>:<div className="evidenceActions"><button onClick={()=>exportEvidence("report")}>Download incident report</button><button className="secondary" onClick={()=>exportEvidence("package")}>Evidence package (JSON)</button></div>}</section>}
  </div></section>}</Shell>
 }
 
@@ -289,6 +289,29 @@ export default function Home(){
  // Reopening from the account dock restores the full investigation: graph,
  // timeline, evidence, branch state and outcome. The case screen fetches its
  // own trace, so only the case record has to travel.
+ const[publicCase,setPublicCase]=useState(false);
+ // A published case opens straight from its link, with no account and no
+ // session. Anything not published answers 404, exactly as a missing case does.
+ useEffect(()=>{
+  if(typeof window==="undefined")return;
+  const id=new URLSearchParams(window.location.search).get("case");
+  if(!id)return;
+  const api=process.env.NEXT_PUBLIC_NEMESIS_API_URL?.replace(/\/$/,"");
+  if(!api)return;
+  let live=true;
+  (async()=>{
+   try{
+    const r=await fetch(`${api}/v1/public/cases/${encodeURIComponent(id)}`);
+    if(!r.ok)return;
+    const record=await r.json();
+    if(!live||!record?.evidence)return;
+    setReal({factual_source:"json_rpc",agent_runtime:record.finding?"google_adk_gemini":"unavailable",case:record});
+    setPublicCase(true);
+    setView("real");
+   }catch{}
+  })();
+  return()=>{live=false};
+ },[]);
  useEffect(()=>onStartInvestigation(()=>{setView("intake");if(typeof window!=="undefined")window.scrollTo({top:0});}),[]);
  useEffect(()=>onOpenSavedCase(saved=>{
   const payload=saved as unknown as RealResponse["case"];
@@ -300,6 +323,6 @@ export default function Home(){
  if(view==="landing")return <Landing onStart={()=>setView("intake")} onDemo={()=>setView("demo")}/>;
  if(view==="intake")return <Intake onBack={()=>setView("landing")} onReal={data=>{setReal(data);setView("real")}} onDemo={()=>setView("demo")}/>;
  if(view==="real"&&real?.case.state==="AMBIGUOUS_INCIDENT")return <AmbiguousCase data={real} onResolved={setReal} onExit={()=>setView("intake")} onHome={()=>setView("landing")}/>;
- if(view==="real"&&real)return <RealCaseScreen data={real} onExit={()=>setView("intake")} onHome={()=>setView("landing")}/>;
+ if(view==="real"&&real)return <RealCaseScreen data={real} isPublic={publicCase} onExit={()=>{setPublicCase(false);setView(publicCase?"landing":"intake")}} onHome={()=>{setPublicCase(false);setView("landing")}}/>;
  return <DemoCaseScreen onExit={()=>setView("intake")} onHome={()=>setView("landing")}/>;
 }

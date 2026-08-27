@@ -152,6 +152,9 @@ class InvestigationCase(BaseModel):
     chain: ChainSelection
     owner_user_id: str | None = None
     owner_email: str | None = None
+    # Only ever set deliberately, on a case chosen for publication. Every case
+    # is private until someone marks this one.
+    is_public_case: bool = False
     theft_transaction_hash: str | None = None
     discovery: IncidentDiscovery | None = None
     evidence: DeterministicEvidence | None = None
