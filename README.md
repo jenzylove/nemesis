@@ -155,16 +155,79 @@ The repository includes automated backend and frontend verification through GitH
 Synthetic demo data is kept separate from the real investigation path and is labelled as demo state in the UI.
 
 
-## Local verification
+## Run it yourself
 
-Prerequisites: Node.js 22.13+, Python 3.12, and provider credentials copied into an ignored local environment file from `.env.example`.
+Everything below is the same path this project is built and deployed through.
+
+### Prerequisites
+
+- Node.js 22.13+ and Python 3.12
+- A Google Cloud project with billing enabled
+- A Firebase web app in that project, with Google and Email/Password sign-in enabled
+- An Alchemy key (wallet-only discovery needs indexed history) and an Ethereum + Base
+  JSON-RPC endpoint. Bitquery, GoPlus and Chainabuse are optional and degrade cleanly.
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/jenzylove/nemesis.git
+cd nemesis
+cp .env.example .env      # .env is git-ignored; never commit real credentials
+```
+
+Fill in `.env`. The four `NEXT_PUBLIC_FIREBASE_*` values come from your Firebase web
+app config, and `GOOGLE_CLOUD_PROJECT` / `FIRESTORE_PROJECT_ID` are your project id.
+
+### 2. Run the API
+
+```bash
+cd backend
+python -m pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8080
+```
+
+`GET http://localhost:8080/health` reports which runtime, agent and providers actually
+resolved, so it is the fastest way to confirm your configuration took effect.
+
+### 3. Run the web app
 
 ```bash
 npm install --no-audit --no-fund
-npm test
-cd backend
-python -m pip install -r requirements.txt
-python -m pytest -q tests
+NEXT_PUBLIC_NEMESIS_API_URL=http://localhost:8080 npm run dev
 ```
 
-The landing page is public. Firebase authentication is required only when an investigation is submitted or a persisted case is opened. Configure the four `NEXT_PUBLIC_FIREBASE_*` values for sign-in, and configure Alchemy for wallet-only discovery. Alchemy supplies historical candidates, Bitquery supplies realtime movement signals when configured, and Ethereum/Base JSON RPC independently verifies admitted evidence.
+Open the printed URL. The landing page is public; authentication is required only when
+an investigation is submitted or a saved case is opened.
+
+### 4. Run the tests
+
+```bash
+npm test                                    # frontend
+cd backend && python -m pytest -q tests      # backend
+```
+
+### 5. Deploy to Google Cloud
+
+Create the Firestore database, the Pub/Sub topic, its authenticated push subscription to
+`/internal/events/pubsub`, and a Cloud Scheduler job hitting `/internal/monitoring/tick`
+every five minutes. `infra/bootstrap-gcp.sh` provisions these. Store provider credentials
+in Secret Manager under the names referenced by `cloudbuild.yaml`.
+
+```bash
+# API
+gcloud builds submit --config cloudbuild.yaml   --substitutions COMMIT_SHA=$(git rev-parse HEAD)
+
+# Web app. Substitutions are comma-separated, and the Firebase values are compiled
+# into the bundle at build time rather than read at runtime.
+gcloud builds submit --config cloudbuild.frontend.yaml   --substitutions _API_URL=https://YOUR-API-URL,_FIREBASE_API_KEY=YOUR_KEY,_FIREBASE_AUTH_DOMAIN=YOUR_PROJECT.firebaseapp.com,_FIREBASE_PROJECT_ID=YOUR_PROJECT,_FIREBASE_APP_ID=YOUR_APP_ID
+```
+
+Add the deployed web app domain to Firebase Authentication's authorized domains, or
+sign-in will be rejected in the browser.
+
+### Verifying a deployment
+
+`GET /health` returns the running `git_sha`. Comparing it against `git rev-parse HEAD`
+confirms the deployed runtime matches the repository.
+
+The landing page is public. Firebase authentication is required only when an investigation is submitted or a persisted case is opened. Alchemy supplies historical candidates, Bitquery supplies realtime movement signals when configured, and Ethereum/Base JSON-RPC independently verifies every piece of evidence admitted to a case.
