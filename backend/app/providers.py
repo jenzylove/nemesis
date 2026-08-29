@@ -103,14 +103,35 @@ class RpcProviderError(RuntimeError):
 
 class JsonRpcProvider(BlockchainProvider):
     def __init__(self, rpc_urls: dict[ChainName, str], timeout_seconds: float = 20, transport: httpx.AsyncBaseTransport | None = None):
+        # A chain may be given several endpoints, comma separated. The first is
+        # preferred and the rest are fallbacks, tried only when the one before
+        # refuses to answer.
         self.rpc_urls = rpc_urls
+        self.endpoints: dict[ChainName, list[str]] = {
+            chain: [part.strip() for part in str(value or "").split(",") if part.strip()]
+            for chain, value in rpc_urls.items()
+        }
         self.timeout_seconds = timeout_seconds
         self.transport = transport
 
     async def _call(self, chain: ChainName, method: str, params: list) -> dict | list | str | None:
-        url = self.rpc_urls.get(chain)
-        if not url:
+        endpoints = self.endpoints.get(chain) or []
+        if not endpoints:
             raise RpcProviderError(f"RPC URL is not configured for {chain}")
+        failure = None
+        for index, url in enumerate(endpoints):
+            try:
+                return await self._call_endpoint(url, chain, method, params)
+            except RpcProviderError as exc:
+                # Keep the first failure: it describes the preferred endpoint,
+                # which is the one worth reporting when every option is down.
+                failure = failure or exc
+                if index + 1 < len(endpoints):
+                    continue
+                raise failure
+        raise failure or RpcProviderError(f"RPC {method} could not be completed")
+
+    async def _call_endpoint(self, url: str, chain: ChainName, method: str, params: list):
         last_error = None
         async with httpx.AsyncClient(timeout=self.timeout_seconds, transport=self.transport) as client:
             for attempt in range(3):
