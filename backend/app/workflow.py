@@ -1,7 +1,12 @@
 from datetime import datetime, timezone
 import uuid
 
-from .discovery import DiscoveryProviderError, DiscoveryUnavailableError, WalletInactiveError
+from .discovery import (
+    DiscoveryProviderError,
+    DiscoveryUnavailableError,
+    IncidentNotFoundError,
+    WalletInactiveError,
+)
 from .incident_selection import rank_verified_candidates, wallet_outflow
 from .models import CaseCreate, CaseResponse, DeterministicEvidence, InvestigationCase
 from .movement import MovementDetectionError
@@ -29,8 +34,24 @@ EVIDENCE_RETRIEVAL_MESSAGE = (
 )
 
 
+# The only failures that describe the evidence itself. A wallet with nothing to
+# find, or an incident that could not be picked out of what was found, are
+# answers. Everything else is NEMESIS failing to look.
+INVESTIGATIVE_OUTCOMES = (IncidentNotFoundError, ValueError)
+
+
 def is_evidence_retrieval_failure(error: BaseException) -> bool:
-    return isinstance(error, EVIDENCE_RETRIEVAL_ERRORS)
+    """Whether this failure means NEMESIS could not retrieve evidence.
+
+    Deliberately inverted: anything not recognised as an investigative answer
+    counts as a retrieval failure. A bug or an unfamiliar provider error must
+    never reach a victim as "no incident found", because that reads as "your
+    wallet is fine". This product would rather admit it could not look than
+    imply it looked and saw nothing.
+    """
+    if isinstance(error, EVIDENCE_RETRIEVAL_ERRORS):
+        return True
+    return not isinstance(error, INVESTIGATIVE_OUTCOMES)
 
 
 class CaseWorkflow:

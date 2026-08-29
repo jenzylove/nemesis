@@ -109,11 +109,25 @@ class Taskmaster:
                 elif e["type"]=="DRAIN_REQUESTED":result=await self.drain_branch(e["branch_id"])
                 elif e["type"]=="TRACE_REQUESTED":result=await self.resume(e["branch_id"],e["transaction_hash"])
                 else:raise ValueError("unsupported event type")
-        except Exception:
+        except Exception as exc:
             await self.repo.release_event(e["id"])
+            # A routine recheck that could not reach the chain is not worth
+            # redelivering into. The scheduler re-queues dormant branches every
+            # few minutes, so failing the delivery only aims more traffic at a
+            # provider that is already refusing it. Work that would otherwise be
+            # lost, such as an unfinished deep trace, still raises so Pub/Sub
+            # retries it.
+            if e.get("type")=="RECHECK_REQUESTED" and self._is_transient(exc):
+                return {"deferred":True}
             raise
         await self.repo.complete_event(e["id"])
         return result
+    @staticmethod
+    def _is_transient(exc):
+        """A provider that is unreachable now and may be reachable shortly."""
+        from .movement import MovementDetectionError
+        from .providers import RpcProviderError
+        return isinstance(exc,(MovementDetectionError,RpcProviderError,TimeoutError))
     async def drain_branch(self,bid):
         """Follow one first-hop branch to its terminal state, off the request path."""
         b=await self.repo.get_branch(bid)
