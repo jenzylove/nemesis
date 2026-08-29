@@ -31,3 +31,29 @@ test("account dock renders one intentional My investigations control",async()=>{
  assert.match(dock,/\{label\}/);
  assert.doesNotMatch(dock,/className="authMini"/);
 });
+test("a failed investigation reports its failure instead of hanging",async()=>{
+  const page=await readFile(new URL("../app/page.tsx",import.meta.url),"utf8");
+  const submit=page.slice(page.indexOf("async function submit("));
+  const body=submit.slice(0,submit.indexOf("\n }"));
+
+  // The progress poll's stop flag has to outlive the try. Declared inside it,
+  // the catch that clears it throws ReferenceError before setError runs, so a
+  // real API error is swallowed and the page appears to hang forever while the
+  // poll keeps firing. This exact bug shipped once.
+  const declaration=body.indexOf("let polling=false");
+  assert.notEqual(declaration,-1,"the poll stop flag must be declared");
+  assert.ok(declaration<body.indexOf("try{"),
+    "the poll stop flag must be declared before the try, or catch cannot reach it");
+
+  // finally runs on success, failure and abort, so stopping there covers paths
+  // a catch block alone would miss.
+  assert.match(body,/finally\{polling=false/,
+    "the poll must be stopped in finally, not only on the success path");
+
+  // Defence in depth: even if the flag were never cleared, the loop ends.
+  assert.match(body,/ticks<\d+/,"the progress poll must be bounded");
+
+  // A non-string detail must not become "[object Object]" in front of a victim.
+  assert.match(body,/typeof payload\?\.detail==="string"/,
+    "the error message must tolerate an unexpected response shape");
+});

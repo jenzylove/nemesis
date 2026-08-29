@@ -1,0 +1,802 @@
+{
+  "name": "projects/nemesis-506114/databases/(default)/documents/cases/NMS-260826-915B337C",
+  "fields": {
+    "evidence": {
+      "mapValue": {
+        "fields": {
+          "transaction": {
+            "mapValue": {
+              "fields": {
+                "native_transfers": {
+                  "arrayValue": {
+                    "values": [
+                      {
+                        "mapValue": {
+                          "fields": {
+                            "provenance": {
+                              "arrayValue": {
+                                "values": [
+                                  {
+                                    "stringValue": "alchemy_getAssetTransfers"
+                                  },
+                                  {
+                                    "stringValue": "category:internal"
+                                  },
+                                  {
+                                    "stringValue": "0xb61413c495fdad6114a7aa863a00b2e3c28945979a10885b12b30316ea9f072c"
+                                  }
+                                ]
+                              }
+                            },
+                            "raw_amount": {
+                              "stringValue": "401346768858404671846374"
+                            },
+                            "from_address": {
+                              "stringValue": "0x1db92e2eebc8e0c075a02bea49a2935bcd2dfcf4"
+                            },
+                            "to_address": {
+                              "stringValue": "0x47666fab8bd0ac7003bce3f5c3585383f09486e2"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "input": {
+                  "stringValue": "0x1163b2b000000000000000000000000047666fab8bd0ac7003bce3f5c3585383f09486e2"
+                },
+                "hash": {
+                  "stringValue": "0xb61413c495fdad6114a7aa863a00b2e3c28945979a10885b12b30316ea9f072c"
+                },
+                "from_address": {
+                  "stringValue": "0x0fa09c3a328792253f8dee7116848723b72a6d2e"
+                },
+                "chain": {
+                  "stringValue": "ethereum"
+                },
+                "nft_transfers": {
+                  "arrayValue": {}
+                },
+                "status": {
+                  "stringValue": "success"
+                },
+                "to_address": {
+                  "stringValue": "0x1db92e2eebc8e0c075a02bea49a2935bcd2dfcf4"
+                },
+                "erc20_transfers": {
+                  "arrayValue": {}
+                },
+                "block_number": {
+                  "integerValue": "21895251"
+                },
+                "timestamp": {
+                  "timestampValue": "2025-02-21T14:16:11Z"
+                },
+                "native_value_wei": {
+                  "stringValue": "0"
+                }
+              }
+            }
+          },
+          "submitted_wallet": {
+            "stringValue": "0x1db92e2eebc8e0c075a02bea49a2935bcd2dfcf4"
+          }
+        }
+      }
+    },
+    "owner_user_id": {
+      "stringValue": "Uo9YkYxsmgcb8FBeXKzgNhtI2ap1"
+    },
+    "updated_at": {
+      "timestampValue": "2026-08-26T00:25:57.772497Z"
+    },
+    "finding": {
+      "mapValue": {
+        "fields": {
+          "summary": {
+            "stringValue": "The incident involves an external caller executing a transaction targeting the submitted contract wallet on the Ethereum chain. This transaction contained specific input data that triggered an internal transfer of a substantial quantity of native assets from the contract to a third-party address. Because the contract was induced to transfer its native balance via an external call, this points to a protocol exploit or contract vulnerability where unauthorized access or logic flaws allowed the funds to be drained."
+          },
+          "evidence_references": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "submitted_wallet"
+                },
+                {
+                  "stringValue": "transaction.hash"
+                },
+                {
+                  "stringValue": "transaction.chain"
+                },
+                {
+                  "stringValue": "transaction.block_number"
+                },
+                {
+                  "stringValue": "transaction.timestamp"
+                },
+                {
+                  "stringValue": "transaction.status"
+                },
+                {
+                  "stringValue": "transaction.from_address"
+                },
+                {
+                  "stringValue": "transaction.to_address"
+                },
+                {
+                  "stringValue": "transaction.native_value_wei"
+                },
+                {
+                  "stringValue": "transaction.input"
+                }
+              ]
+            }
+          },
+          "classification": {
+            "stringValue": "unknown"
+          },
+          "compromise_mechanism_confidence": {
+            "doubleValue": 0.15
+          },
+          "limitations": {
+            "arrayValue": {
+              "values": [
+                {
+                  "stringValue": "The analysis is restricted to a single transaction, preventing a complete flow analysis of the assets."
+                },
+                {
+                  "stringValue": "The contract code and logic for the executed function cannot be verified directly from the transaction logs."
+                },
+                {
+                  "stringValue": "The relationships between the transaction initiator, the contract owner, and the recipient address remain unverified."
+                },
+                {
+                  "stringValue": "The deterministic evidence does not contain the prerequisites for the proposed compromise mechanism."
+                }
+              ]
+            }
+          },
+          "confidence": {
+            "doubleValue": 0.15
+          }
+        }
+      }
+    },
+    "state": {
+      "stringValue": "MONITORING"
+    },
+    "error": {
+      "nullValue": null
+    },
+    "theft_transaction_hash": {
+      "stringValue": "0xb61413c495fdad6114a7aa863a00b2e3c28945979a10885b12b30316ea9f072c"
+    },
+    "is_public_case": {
+      "booleanValue": true
+    },
+    "wallet_address": {
+      "stringValue": "0x1db92e2eebc8e0c075a02bea49a2935bcd2dfcf4"
+    },
+    "chain": {
+      "stringValue": "ethereum"
+    },
+    "id": {
+      "stringValue": "NMS-260826-915B337C"
+    },
+    "discovery": {
+      "mapValue": {
+        "fields": {
+          "ambiguity_reason": {
+            "nullValue": null
+          },
+          "incident_selection_confidence": {
+            "doubleValue": 1
+          },
+          "candidates": {
+            "arrayValue": {
+              "values": [
+                {
+                  "mapValue": {
+                    "fields": {
+                      "transaction_from": {
+                        "stringValue": "0x0fa09c3a328792253f8dee7116848723b72a6d2e"
+                      },
+                      "native_outflow_wei": {
+                        "stringValue": "401346768858404671846374"
+                      },
+                      "indexed_native_destination": {
+                        "stringValue": "0x47666fab8bd0ac7003bce3f5c3585383f09486e2"
+                      },
+                      "amount_usd": {
+                        "nullValue": null
+                      },
+                      "asset_count": {
+                        "integerValue": "1"
+                      },
+                      "score": {
+                        "doubleValue": 161
+                      },
+                      "goplus_flags": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "stealing_attack"
+                            }
+                          ]
+                        }
+                      },
+                      "outgoing_transfer_count": {
+                        "integerValue": "1"
+                      },
+                      "transaction_to": {
+                        "stringValue": "0x1db92e2eebc8e0c075a02bea49a2935bcd2dfcf4"
+                      },
+                      "method_id": {
+                        "stringValue": "0x1163b2b0"
+                      },
+                      "selection_confidence": {
+                        "doubleValue": 1
+                      },
+                      "outflow_summary": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "native"
+                            }
+                          ]
+                        }
+                      },
+                      "nft_outflow_count": {
+                        "integerValue": "0"
+                      },
+                      "reasons": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "wallet is the indexed outgoing transfer sender"
+                            },
+                            {
+                              "stringValue": "largest indexed native outflow exceeds the next candidate by at least five times"
+                            },
+                            {
+                              "stringValue": "GoPlus flags the outgoing counterparty"
+                            },
+                            {
+                              "stringValue": "Chainabuse has reports for the outgoing counterparty"
+                            },
+                            {
+                              "stringValue": "RPC transaction verification plus indexed internal-call evidence shows a third-party caller moved native value"
+                            }
+                          ]
+                        }
+                      },
+                      "chainabuse_report_count": {
+                        "integerValue": "1"
+                      },
+                      "destination_summary": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "0x47666fab8bd0ac7003bce3f5c3585383f09486e2"
+                            }
+                          ]
+                        }
+                      },
+                      "counterparty": {
+                        "stringValue": "0x47666fab8bd0ac7003bce3f5c3585383f09486e2"
+                      },
+                      "caller_relationship": {
+                        "stringValue": "third_party"
+                      },
+                      "transaction_hash": {
+                        "stringValue": "0xb61413c495fdad6114a7aa863a00b2e3c28945979a10885b12b30316ea9f072c"
+                      },
+                      "indexed_evidence_provenance": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "alchemy_getAssetTransfers"
+                            },
+                            {
+                              "stringValue": "category:internal"
+                            },
+                            {
+                              "stringValue": "0xb61413c495fdad6114a7aa863a00b2e3c28945979a10885b12b30316ea9f072c"
+                            }
+                          ]
+                        }
+                      },
+                      "destination_count": {
+                        "integerValue": "1"
+                      },
+                      "block_number": {
+                        "integerValue": "21895251"
+                      },
+                      "token_outflow_count": {
+                        "integerValue": "0"
+                      },
+                      "timestamp": {
+                        "timestampValue": "2025-02-21T14:16:11Z"
+                      }
+                    }
+                  }
+                },
+                {
+                  "mapValue": {
+                    "fields": {
+                      "transaction_from": {
+                        "stringValue": "0x0fa09c3a328792253f8dee7116848723b72a6d2e"
+                      },
+                      "native_outflow_wei": {
+                        "stringValue": "0"
+                      },
+                      "indexed_native_destination": {
+                        "nullValue": null
+                      },
+                      "amount_usd": {
+                        "nullValue": null
+                      },
+                      "asset_count": {
+                        "integerValue": "1"
+                      },
+                      "score": {
+                        "doubleValue": 118
+                      },
+                      "goplus_flags": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "stealing_attack"
+                            }
+                          ]
+                        }
+                      },
+                      "outgoing_transfer_count": {
+                        "integerValue": "1"
+                      },
+                      "transaction_to": {
+                        "stringValue": "0x1db92e2eebc8e0c075a02bea49a2935bcd2dfcf4"
+                      },
+                      "method_id": {
+                        "stringValue": "0x582515c7"
+                      },
+                      "selection_confidence": {
+                        "doubleValue": 0.515
+                      },
+                      "outflow_summary": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "0xe6829d9a7ee3040e1276fa75293bde931859e8fa"
+                            }
+                          ]
+                        }
+                      },
+                      "nft_outflow_count": {
+                        "integerValue": "0"
+                      },
+                      "reasons": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "wallet is the indexed outgoing transfer sender"
+                            },
+                            {
+                              "stringValue": "GoPlus flags the outgoing counterparty"
+                            },
+                            {
+                              "stringValue": "Chainabuse has reports for the outgoing counterparty"
+                            },
+                            {
+                              "stringValue": "RPC shows a third-party transaction caller moved wallet assets"
+                            }
+                          ]
+                        }
+                      },
+                      "chainabuse_report_count": {
+                        "integerValue": "1"
+                      },
+                      "destination_summary": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "0x47666fab8bd0ac7003bce3f5c3585383f09486e2"
+                            }
+                          ]
+                        }
+                      },
+                      "counterparty": {
+                        "stringValue": "0x47666fab8bd0ac7003bce3f5c3585383f09486e2"
+                      },
+                      "caller_relationship": {
+                        "stringValue": "third_party"
+                      },
+                      "transaction_hash": {
+                        "stringValue": "0x847b8403e8a4816a4de1e63db321705cdb6f998fb01ab58f653b863fda988647"
+                      },
+                      "indexed_evidence_provenance": {
+                        "arrayValue": {}
+                      },
+                      "destination_count": {
+                        "integerValue": "1"
+                      },
+                      "block_number": {
+                        "integerValue": "21895251"
+                      },
+                      "token_outflow_count": {
+                        "integerValue": "1"
+                      },
+                      "timestamp": {
+                        "timestampValue": "2025-02-21T14:16:11Z"
+                      }
+                    }
+                  }
+                },
+                {
+                  "mapValue": {
+                    "fields": {
+                      "transaction_from": {
+                        "stringValue": "0x0fa09c3a328792253f8dee7116848723b72a6d2e"
+                      },
+                      "native_outflow_wei": {
+                        "stringValue": "0"
+                      },
+                      "indexed_native_destination": {
+                        "nullValue": null
+                      },
+                      "amount_usd": {
+                        "nullValue": null
+                      },
+                      "asset_count": {
+                        "integerValue": "1"
+                      },
+                      "score": {
+                        "doubleValue": 118
+                      },
+                      "goplus_flags": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "stealing_attack"
+                            }
+                          ]
+                        }
+                      },
+                      "outgoing_transfer_count": {
+                        "integerValue": "1"
+                      },
+                      "transaction_to": {
+                        "stringValue": "0x1db92e2eebc8e0c075a02bea49a2935bcd2dfcf4"
+                      },
+                      "method_id": {
+                        "stringValue": "0x582515c7"
+                      },
+                      "selection_confidence": {
+                        "doubleValue": 0.515
+                      },
+                      "outflow_summary": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84"
+                            }
+                          ]
+                        }
+                      },
+                      "nft_outflow_count": {
+                        "integerValue": "0"
+                      },
+                      "reasons": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "wallet is the indexed outgoing transfer sender"
+                            },
+                            {
+                              "stringValue": "GoPlus flags the outgoing counterparty"
+                            },
+                            {
+                              "stringValue": "Chainabuse has reports for the outgoing counterparty"
+                            },
+                            {
+                              "stringValue": "RPC shows a third-party transaction caller moved wallet assets"
+                            }
+                          ]
+                        }
+                      },
+                      "chainabuse_report_count": {
+                        "integerValue": "1"
+                      },
+                      "destination_summary": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "0x47666fab8bd0ac7003bce3f5c3585383f09486e2"
+                            }
+                          ]
+                        }
+                      },
+                      "counterparty": {
+                        "stringValue": "0x47666fab8bd0ac7003bce3f5c3585383f09486e2"
+                      },
+                      "caller_relationship": {
+                        "stringValue": "third_party"
+                      },
+                      "transaction_hash": {
+                        "stringValue": "0xa284a1bc4c7e0379c924c73fcea1067068635507254b03ebbbd3f4e222c1fae0"
+                      },
+                      "indexed_evidence_provenance": {
+                        "arrayValue": {}
+                      },
+                      "destination_count": {
+                        "integerValue": "1"
+                      },
+                      "block_number": {
+                        "integerValue": "21895251"
+                      },
+                      "token_outflow_count": {
+                        "integerValue": "1"
+                      },
+                      "timestamp": {
+                        "timestampValue": "2025-02-21T14:16:11Z"
+                      }
+                    }
+                  }
+                },
+                {
+                  "mapValue": {
+                    "fields": {
+                      "transaction_from": {
+                        "stringValue": "0x0fa09c3a328792253f8dee7116848723b72a6d2e"
+                      },
+                      "native_outflow_wei": {
+                        "stringValue": "0"
+                      },
+                      "indexed_native_destination": {
+                        "nullValue": null
+                      },
+                      "amount_usd": {
+                        "nullValue": null
+                      },
+                      "asset_count": {
+                        "integerValue": "1"
+                      },
+                      "score": {
+                        "doubleValue": 118
+                      },
+                      "goplus_flags": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "stealing_attack"
+                            }
+                          ]
+                        }
+                      },
+                      "outgoing_transfer_count": {
+                        "integerValue": "1"
+                      },
+                      "transaction_to": {
+                        "stringValue": "0x1db92e2eebc8e0c075a02bea49a2935bcd2dfcf4"
+                      },
+                      "method_id": {
+                        "stringValue": "0x582515c7"
+                      },
+                      "selection_confidence": {
+                        "doubleValue": 0.515
+                      },
+                      "outflow_summary": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "0xd5f7838f5c461feff7fe49ea5ebaf7728bb0adfa"
+                            }
+                          ]
+                        }
+                      },
+                      "nft_outflow_count": {
+                        "integerValue": "0"
+                      },
+                      "reasons": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "wallet is the indexed outgoing transfer sender"
+                            },
+                            {
+                              "stringValue": "GoPlus flags the outgoing counterparty"
+                            },
+                            {
+                              "stringValue": "Chainabuse has reports for the outgoing counterparty"
+                            },
+                            {
+                              "stringValue": "RPC shows a third-party transaction caller moved wallet assets"
+                            }
+                          ]
+                        }
+                      },
+                      "chainabuse_report_count": {
+                        "integerValue": "1"
+                      },
+                      "destination_summary": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "0x47666fab8bd0ac7003bce3f5c3585383f09486e2"
+                            }
+                          ]
+                        }
+                      },
+                      "counterparty": {
+                        "stringValue": "0x47666fab8bd0ac7003bce3f5c3585383f09486e2"
+                      },
+                      "caller_relationship": {
+                        "stringValue": "third_party"
+                      },
+                      "transaction_hash": {
+                        "stringValue": "0xbcf316f5835362b7f1586215173cc8b294f5499c60c029a3de6318bf25ca7b20"
+                      },
+                      "indexed_evidence_provenance": {
+                        "arrayValue": {}
+                      },
+                      "destination_count": {
+                        "integerValue": "1"
+                      },
+                      "block_number": {
+                        "integerValue": "21895251"
+                      },
+                      "token_outflow_count": {
+                        "integerValue": "1"
+                      },
+                      "timestamp": {
+                        "timestampValue": "2025-02-21T14:16:11Z"
+                      }
+                    }
+                  }
+                },
+                {
+                  "mapValue": {
+                    "fields": {
+                      "transaction_from": {
+                        "stringValue": "0x0fa09c3a328792253f8dee7116848723b72a6d2e"
+                      },
+                      "native_outflow_wei": {
+                        "stringValue": "0"
+                      },
+                      "indexed_native_destination": {
+                        "nullValue": null
+                      },
+                      "amount_usd": {
+                        "nullValue": null
+                      },
+                      "asset_count": {
+                        "integerValue": "1"
+                      },
+                      "score": {
+                        "doubleValue": 118
+                      },
+                      "goplus_flags": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "stealing_attack"
+                            }
+                          ]
+                        }
+                      },
+                      "outgoing_transfer_count": {
+                        "integerValue": "1"
+                      },
+                      "transaction_to": {
+                        "stringValue": "0x1db92e2eebc8e0c075a02bea49a2935bcd2dfcf4"
+                      },
+                      "method_id": {
+                        "stringValue": "0x582515c7"
+                      },
+                      "selection_confidence": {
+                        "doubleValue": 0.515
+                      },
+                      "outflow_summary": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "0xdac17f958d2ee523a2206206994597c13d831ec7"
+                            }
+                          ]
+                        }
+                      },
+                      "nft_outflow_count": {
+                        "integerValue": "0"
+                      },
+                      "reasons": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "wallet is the indexed outgoing transfer sender"
+                            },
+                            {
+                              "stringValue": "GoPlus flags the outgoing counterparty"
+                            },
+                            {
+                              "stringValue": "Chainabuse has reports for the outgoing counterparty"
+                            },
+                            {
+                              "stringValue": "RPC shows a third-party transaction caller moved wallet assets"
+                            }
+                          ]
+                        }
+                      },
+                      "chainabuse_report_count": {
+                        "integerValue": "1"
+                      },
+                      "destination_summary": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "0x47666fab8bd0ac7003bce3f5c3585383f09486e2"
+                            }
+                          ]
+                        }
+                      },
+                      "counterparty": {
+                        "stringValue": "0x47666fab8bd0ac7003bce3f5c3585383f09486e2"
+                      },
+                      "caller_relationship": {
+                        "stringValue": "third_party"
+                      },
+                      "transaction_hash": {
+                        "stringValue": "0x25800d105db4f21908d646a7a3db849343737c5fba0bc5701f782bf0e75217c9"
+                      },
+                      "indexed_evidence_provenance": {
+                        "arrayValue": {}
+                      },
+                      "destination_count": {
+                        "integerValue": "1"
+                      },
+                      "block_number": {
+                        "integerValue": "21895246"
+                      },
+                      "token_outflow_count": {
+                        "integerValue": "1"
+                      },
+                      "timestamp": {
+                        "timestampValue": "2025-02-21T14:15:11Z"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "selected_score": {
+            "doubleValue": 161
+          },
+          "incident_time": {
+            "nullValue": null
+          },
+          "selected_transaction_hash": {
+            "stringValue": "0xb61413c495fdad6114a7aa863a00b2e3c28945979a10885b12b30316ea9f072c"
+          },
+          "status": {
+            "stringValue": "SELECTED"
+          },
+          "candidate_count": {
+            "integerValue": "69"
+          },
+          "source": {
+            "stringValue": "alchemy"
+          }
+        }
+      }
+    },
+    "created_at": {
+      "timestampValue": "2026-08-26T00:22:51.337556Z"
+    },
+    "owner_email": {
+      "stringValue": "demo-check-1787703766@example.com"
+    }
+  },
+  "createTime": "2026-08-26T00:22:54.306380Z",
+  "updateTime": "2026-08-27T13:57:20.487945Z"
+}

@@ -11,6 +11,7 @@ from .discovery import (
     DiscoveryUnavailableError,
     GoPlusAddressClient,
     IncidentNotFoundError,
+    WalletInactiveError,
     _as_utc,
 )
 from .models import ChainName, DiscoveryCandidate, IncidentDiscovery
@@ -285,9 +286,14 @@ class AlchemyIncidentDiscovery:
     async def discover(
         self, chain: ChainName, wallet: str, incident_time: datetime | None = None
     ) -> IncidentDiscovery:
-        candidates = self._build_candidates(
-            await self._history(chain, wallet), wallet, incident_time
-        )
+        history = await self._history(chain, wallet)
+        if not history:
+            # Nothing ever left this address on this chain, so there is no
+            # incident here to find rather than one that failed to qualify.
+            raise WalletInactiveError(
+                f"This wallet has no outgoing transaction history on {chain}."
+            )
+        candidates = self._build_candidates(history, wallet, incident_time)
         if not candidates:
             raise IncidentNotFoundError(
                 "No deterministic outgoing transfer candidate was found for this wallet. Add an approximate incident time or a known theft transaction hash."

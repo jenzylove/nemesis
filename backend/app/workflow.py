@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import uuid
 
-from .discovery import DiscoveryProviderError, DiscoveryUnavailableError
+from .discovery import DiscoveryProviderError, DiscoveryUnavailableError, WalletInactiveError
 from .incident_selection import rank_verified_candidates, wallet_outflow
 from .models import CaseCreate, CaseResponse, DeterministicEvidence, InvestigationCase
 from .movement import MovementDetectionError
@@ -65,6 +65,7 @@ class CaseWorkflow:
         resolved = []
         failures = []
         retrieval_failures = []
+        inactive_chains = []
         for chain in SUPPORTED_CHAINS:
             try:
                 discovery = await self.discovery.discover(chain, wallet, incident_time)
@@ -76,6 +77,8 @@ class CaseWorkflow:
                 failures.append(f"{chain}: {exc}")
                 if is_evidence_retrieval_failure(exc):
                     retrieval_failures.append(f"{chain}: {exc}")
+                if isinstance(exc, WalletInactiveError):
+                    inactive_chains.append(chain)
 
         if not resolved:
             # If every chain failed and any of those failures was an outage, this
@@ -83,6 +86,15 @@ class CaseWorkflow:
             # investigative result.
             if retrieval_failures:
                 raise DiscoveryProviderError(EVIDENCE_RETRIEVAL_MESSAGE)
+            if len(inactive_chains) == len(SUPPORTED_CHAINS):
+                # The product could not have found anything here, which is not
+                # the same as having looked and found nothing.
+                raise ValueError(
+                    "This wallet has never sent a transaction on "
+                    f"{' or '.join(c.title() for c in SUPPORTED_CHAINS)}, the networks NEMESIS "
+                    "supports today. If the funds were taken on another network, NEMESIS "
+                    "cannot investigate it yet."
+                )
             raise ValueError(
                 "No verified incident was found for this wallet on the supported networks "
                 f"({', '.join(SUPPORTED_CHAINS)}). If you know the theft transaction hash, "

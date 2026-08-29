@@ -103,6 +103,9 @@ function Intake({onBack,onReal,onDemo}:{onBack:()=>void;onReal:(data:RealRespons
   if(walletError||hashError)return;
   submitting.current=true;setLoading(true);setError("");
   const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),180000);
+  // Declared out here on purpose. Held inside the try it is invisible to catch
+  // and finally, and clearing it there throws before the error can be shown.
+  let polling=false;
   try{
    const api=process.env.NEXT_PUBLIC_NEMESIS_API_URL;
    if(!api)throw new Error("The real investigation API is not configured for this deployment.");
@@ -112,9 +115,11 @@ function Intake({onBack,onReal,onDemo}:{onBack:()=>void;onReal:(data:RealRespons
    if(incidentTime)body.incident_time=new Date(incidentTime).toISOString();
    // Poll the phase the backend has actually reached. Nothing is shown until it
    // reports one, so the interface never claims progress that has not happened.
-   let polling=true;
+   polling=true;
    const poll=async()=>{
-    while(polling){
+    // Bounded as well as flagged, so a stop that never arrives costs a few
+    // minutes of polling rather than the lifetime of the page.
+    for(let ticks=0;polling&&ticks<160;ticks++){
      try{
       const r=await fetch(`${api.replace(/\/$/,"")}/v1/progress/${token}`);
       if(r.ok){const p=await r.json();if(p?.label)setStage({label:p.label,index:p.index,total:p.total});}
@@ -125,10 +130,9 @@ function Intake({onBack,onReal,onDemo}:{onBack:()=>void;onReal:(data:RealRespons
    void poll();
    const response=await fetch(`${api.replace(/\/$/,"")}/v1/cases`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body),signal:controller.signal});
    const payload=await response.json();
-   if(!response.ok)throw new Error(payload.detail||"Investigation failed");
+   if(!response.ok)throw new Error(typeof payload?.detail==="string"?payload.detail:"The investigation could not be completed. Please try again.");
    onReal(payload as RealResponse);
-   polling=false;
-  }catch(reason){polling=false;setError(reason instanceof DOMException&&reason.name==="AbortError"?"The investigation request took too long. No duplicate request was started; please try again.":reason instanceof Error?reason.message:"Investigation failed")}finally{clearTimeout(timeout);submitting.current=false;setLoading(false);setStage(null)}
+  }catch(reason){setError(reason instanceof DOMException&&reason.name==="AbortError"?"The investigation request took too long. No duplicate request was started; please try again.":reason instanceof Error?reason.message:"Investigation failed")}finally{polling=false;clearTimeout(timeout);submitting.current=false;setLoading(false);setStage(null)}
  }
  return <main className="intake page"><nav><Brand/><button className="linkBtn" onClick={onBack}>← Back</button></nav><div className="formWrap"><div className="eyebrow">OPEN A REAL CASE</div><h2>Start an investigation</h2><p>Start with the affected wallet. If you know the theft transaction, add it for the fastest path. Otherwise NEMESIS searches the wallet’s history and verifies the likely incident before tracing.</p><div className="fields"><label>Wallet address<input value={wallet} onChange={e=>setWallet(e.target.value)} onBlur={()=>{setWalletTouched(true);setWallet(value=>value.trim())}} aria-invalid={Boolean((walletTouched||wallet)&&walletError)} aria-describedby="wallet-error" placeholder="0x…"/>{(walletTouched||wallet)&&walletError&&<small id="wallet-error" className="fieldError" role="alert">{walletError}</small>}</label><label>Network<select value={chain} onChange={e=>setChain(e.target.value)}><option value="auto">Auto detect · Ethereum + Base</option><option value="ethereum">Ethereum</option><option value="base">Base</option></select></label><label className="wide">Theft transaction hash <span style={{opacity:.6}}>(optional)</span><input value={hash} onChange={e=>setHash(e.target.value)} onBlur={()=>{setHashTouched(true);setHash(value=>value.trim())}} aria-invalid={Boolean((hashTouched||hash)&&hashError)} aria-describedby="hash-error" placeholder="0x… if known"/>{(hashTouched||hash)&&hashError&&<small id="hash-error" className="fieldError" role="alert">{hashError}</small>}</label><label className="wide">Approximate incident time <span style={{opacity:.6}}>(optional)</span><input type="datetime-local" value={incidentTime} onChange={e=>setIncidentTime(e.target.value)}/></label></div><div className="evidenceNote"><span>◆</span><p><strong>Evidence first</strong>{cleanHash?" NEMESIS verifies the transaction you supplied onchain before making any assessment.":" NEMESIS verifies onchain activity before making any assessment. Facts, interpretation, and unknowns stay clearly separated."}</p></div>{error&&<div className="formError">{error}</div>}<button className="primary submit" disabled={!canSubmit} onClick={submit}>{loading?(stage?`${stage.label}…`:"Starting investigation…"):(cleanHash?"Create case & begin investigation":"Discover incident & begin investigation")} <span>↗</span></button>{loading&&<div className="stageTrack" role="status" aria-live="polite"><div className="stageBar"><i style={{width:`${stage?Math.round((stage.index/stage.total)*100):4}%`}}/></div><small>{stage?`Step ${stage.index} of ${stage.total} · ${stage.label}`:"Contacting the investigation runtime"}</small><small className="stageNote">A full wallet investigation verifies every hop onchain and can take a few minutes.</small></div>}<button className="demoButton" onClick={onDemo}>Run deterministic demo instead</button></div></main>
 }

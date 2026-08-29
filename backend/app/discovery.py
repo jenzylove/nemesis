@@ -42,6 +42,15 @@ class IncidentNotFoundError(LookupError):
     pass
 
 
+class WalletInactiveError(IncidentNotFoundError):
+    """The wallet has no outgoing history at all on this chain.
+
+    A subclass, so every existing handler keeps treating it as "no incident
+    found". Callers that want to explain the difference can check for it.
+    """
+
+
+
 def _as_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None

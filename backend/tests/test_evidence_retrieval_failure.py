@@ -68,3 +68,43 @@ async def test_sanctioned_destination_is_actionable():
     assert hit.evidence_type == "ofac_sdn_sanctions_list"
     # NEMESIS must not name an operator the source list does not evidence.
     assert hit.entity_name == "OFAC sanctioned address"
+
+
+@pytest.mark.asyncio
+async def test_a_wallet_with_no_history_is_told_why():
+    """A wallet drained on an unsupported network is not a cleared wallet."""
+    from app.discovery import WalletInactiveError
+
+    repo = Repo()
+    workflow = CaseWorkflow(
+        repo, provider=None, classifier=None,
+        discovery=BrokenDiscovery(WalletInactiveError("no outgoing history")),
+    )
+    request = CaseCreate(wallet_address="0x" + "ef" * 20, chain="auto")
+
+    with pytest.raises(ValueError) as raised:
+        await workflow.create_and_investigate(request, owner_user_id="user-1")
+
+    message = str(raised.value)
+    assert "never sent a transaction" in message
+    assert "Ethereum" in message and "Base" in message
+    # it must not imply the wallet was examined and cleared
+    assert "No verified incident was found" not in message
+
+
+@pytest.mark.asyncio
+async def test_a_wallet_with_history_but_no_candidate_keeps_the_other_message():
+    from app.discovery import IncidentNotFoundError
+
+    repo = Repo()
+    workflow = CaseWorkflow(
+        repo, provider=None, classifier=None,
+        discovery=BrokenDiscovery(IncidentNotFoundError("nothing qualified")),
+    )
+    request = CaseCreate(wallet_address="0x" + "ab" * 20, chain="auto")
+
+    with pytest.raises(ValueError) as raised:
+        await workflow.create_and_investigate(request, owner_user_id="user-1")
+
+    assert "No verified incident was found" in str(raised.value)
+    assert "never sent a transaction" not in str(raised.value)
