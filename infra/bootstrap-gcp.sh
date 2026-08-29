@@ -37,7 +37,14 @@ gcloud pubsub subscriptions describe nemesis-case-events-push >/dev/null 2>&1 ||
   --topic nemesis-case-events \
   --push-endpoint "https://nemesis-api-staging-h7bnd6kzfq-uc.a.run.app/internal/events/pubsub" \
   --push-auth-service-account "${RUNTIME_ACCOUNT}" \
-  --push-auth-token-audience "https://nemesis-api-staging-h7bnd6kzfq-uc.a.run.app"
+  --push-auth-token-audience "https://nemesis-api-staging-h7bnd6kzfq-uc.a.run.app" \n  --ack-deadline=600 --min-retry-delay=10s --max-retry-delay=600s
+
+# A deep trace runs for minutes, so the default ten second acknowledgement
+# deadline had Pub/Sub redelivering work that was still in progress. With no
+# retry policy it also redelivered failures immediately, aiming a burst of
+# traffic at whichever provider had just refused the last request. Applied to
+# an existing subscription as well, so a deployment predating this is corrected.
+gcloud pubsub subscriptions update nemesis-case-events-push \n  --ack-deadline=600 --min-retry-delay=10s --max-retry-delay=600s >/dev/null
 
 gcloud scheduler jobs describe nemesis-monitor-tick --location "${REGION}" >/dev/null 2>&1 || gcloud scheduler jobs create http nemesis-monitor-tick \
   --location "${REGION}" --schedule "*/5 * * * *" --uri "https://nemesis-api-staging-h7bnd6kzfq-uc.a.run.app/internal/monitoring/tick" \
